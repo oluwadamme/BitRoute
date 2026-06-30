@@ -271,6 +271,12 @@ Configuration (connection strings, JWT signing key, Stripe keys, Redis) is read 
 Built as a series of phases, each shippable on its own. Build a thin vertical slice through Phase 3 first, then layer the rest.
 
 - **Phase 1, Clean Architecture setup**: solution layout via the .NET CLI, the four projects, and the dependency-direction check (Domain and Application reference nothing outward). Overlap rules embedded in the entities, not in anemic services.
+  - [x] Solution scaffolded via the .NET CLI with the four projects (Api, Application, Domain, Infrastructure).
+  - [x] Inward project references wired: Application and Infrastructure reference only Domain; Api references Application and Infrastructure as the composition root.
+  - [x] Solution file populated, root `.gitignore` added, and build artifacts untracked.
+  - [x] `Segment` value object owns the half-open overlap rule as behavior, not an anemic service.
+  - [x] xUnit test project under `tests/` with exhaustive `Segment` overlap unit tests, including the half-open boundary case.
+  - [ ] Automated dependency-direction check that fails the build if a layer references outward.
 - **Phase 2, decoupled identity**: ASP.NET Core Identity password hashing, JWT issuance with user claims, and the Redis-backed sliding refresh-token store.
 - **Phase 3, high-concurrency overlap engine**: the `Route -> Schedule -> ScheduleLeg -> SeatBooking` schema, the leg-overlap query, Serializable transactions with a retry loop, and the exclusion constraint backstop. Plus the hold-and-expiry pattern.
 - **Phase 4, webhook architecture**: the Stripe server-side integration, a signature-verified callback endpoint, idempotent event handling, and MediatR notifications on confirmation.

@@ -5,4 +5,7 @@
     <Project Path="src/BitRoute.Domain/BitRoute.Domain.csproj" />
     <Project Path="src/BitRoute.Infrastructure/BitRoute.Infrastructure.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/BitRoute.Domain.Tests/BitRoute.Domain.Tests.csproj" />
+  </Folder>
 </Solution>
