@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "dgSpecHash": "osiThOkglGU=",
+  "success": true,
+  "projectFilePath": "/Users/nombauser/Documents/dotnet_projects/BitRoute/src/BitRoute.Api/BitRoute.Api.csproj",
+  "expectedPackageFiles": [
+    "/Users/nombauser/.nuget/packages/microsoft.aspnetcore.openapi/10.0.3/microsoft.aspnetcore.openapi.10.0.3.nupkg.sha512",
+    "/Users/nombauser/.nuget/packages/microsoft.openapi/2.0.0/microsoft.openapi.2.0.0.nupkg.sha512"
+  ],
+  "logs": []
+}
