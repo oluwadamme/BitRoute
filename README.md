@@ -278,6 +278,17 @@ Built as a series of phases, each shippable on its own. Build a thin vertical sl
   - [x] xUnit test project under `tests/` with exhaustive `Segment` overlap unit tests, including the half-open boundary case.
   - [x] Automated dependency-direction check (NetArchTest) that fails the build if a layer references outward.
 - **Phase 2, decoupled identity**: ASP.NET Core Identity password hashing, JWT issuance with user claims, and the Redis-backed sliding refresh-token store.
+  - Decisions: login by email; 60-minute access token and 30-day sliding refresh; refresh tokens are one-time-use with reuse detection that revokes the session family; passengers self-register while operators and admins are provisioned (no role accepted from the client).
+  - [ ] Domain: `User` concept and `Role` enum (passenger, operator, admin), plus the Identity boundary decision (rich Domain user vs Infrastructure `IdentityUser`).
+  - [ ] Domain: refresh-token model (token, expiry, session-family id, used flag) with reuse-detection rules as behavior, and auth domain exceptions.
+  - [ ] Infrastructure: ASP.NET Core Identity on EF Core + PostgreSQL for password hashing, with the Identity migration.
+  - [ ] Infrastructure: JWT generator (60-minute access token carrying user claims) behind a Domain-defined interface.
+  - [ ] Infrastructure: Redis-backed refresh-token store with the 30-day sliding window, rotation, reuse detection, and family revocation.
+  - [ ] Application: auth service orchestrating register, login, refresh, and logout, with record DTOs and FluentValidation.
+  - [ ] Api: auth endpoints (`/auth/register`, `/auth/login`, `/auth/refresh`, logout), JWT bearer auth, policy-based authorization, and DI registration.
+  - [ ] Api: map the new auth exceptions in `ExceptionMiddleware`.
+  - [ ] Cross-cutting: admin seeding and the admin-only operator provisioning path.
+  - [ ] Tests: login, refresh rotation, reuse detection revoking the family, and authorization failures.
 - **Phase 3, high-concurrency overlap engine**: the `Route -> Schedule -> ScheduleLeg -> SeatBooking` schema, the leg-overlap query, Serializable transactions with a retry loop, and the exclusion constraint backstop. Plus the hold-and-expiry pattern.
 - **Phase 4, webhook architecture**: the Stripe server-side integration, a signature-verified callback endpoint, idempotent event handling, and MediatR notifications on confirmation.
 - **Phase 5, real-time WebSockets**: the SignalR hub, and mapping incoming GPS pings onto active leg windows.
