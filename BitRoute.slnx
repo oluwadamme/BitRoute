@@ -1,2 +1,8 @@
 <Solution>
+  <Folder Name="/src/">
+    <Project Path="src/BitRoute.Api/BitRoute.Api.csproj" />
+    <Project Path="src/BitRoute.Application/BitRoute.Application.csproj" />
+    <Project Path="src/BitRoute.Domain/BitRoute.Domain.csproj" />
+    <Project Path="src/BitRoute.Infrastructure/BitRoute.Infrastructure.csproj" />
+  </Folder>
 </Solution>
