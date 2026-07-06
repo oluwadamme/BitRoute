@@ -50,6 +50,8 @@ appsettings.*.local.json
 .env
 .env.*
 secrets.json
+# ...but keep the committed template
+!.env.example
 
 # Logs
 *.log
