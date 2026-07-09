@@ -1,9 +1,12 @@
+using System.Text;
+using BitRoute.Domain.Interfaces;
 using BitRoute.Infrastructure.Identity;
 using BitRoute.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace BitRoute.Infrastructure;
 
@@ -31,6 +34,20 @@ public static class DependencyInjection
             })
             .AddRoles<IdentityRole<Guid>>()
             .AddEntityFrameworkStores<BitRouteDbContext>();
+
+        services.AddOptions<JwtOptions>()
+            .Bind(configuration.GetSection(JwtOptions.SectionName))
+            .Validate(o => !string.IsNullOrWhiteSpace(o.Issuer), "Jwt:Issuer is required.")
+            .Validate(o => !string.IsNullOrWhiteSpace(o.Audience), "Jwt:Audience is required.")
+            .Validate(
+                o => Encoding.UTF8.GetByteCount(o.SigningKey) >= 32,
+                "Jwt:SigningKey must be at least 32 bytes.")
+            .Validate(o => o.AccessTokenMinutes > 0, "Jwt:AccessTokenMinutes must be positive.")
+            .Validate(o => o.RefreshTokenDays > 0, "Jwt:RefreshTokenDays must be positive.")
+            .ValidateOnStart();
+
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<ITokenGenerator, JwtTokenGenerator>();
 
         return services;
     }
