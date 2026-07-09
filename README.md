@@ -254,8 +254,9 @@ cd bitroute
 # 2. Start PostgreSQL and Redis
 docker compose up -d
 
-# 3. Apply migrations
-dotnet ef database update --project src/BitRoute.Infrastructure --startup-project src/BitRoute.Api
+# 3. Apply migrations (the design-time factory reads ConnectionStrings__Postgres)
+ConnectionStrings__Postgres="Host=localhost;Port=5432;Database=bitroute;Username=bitroute;Password=bitroute" \
+  dotnet ef database update --project src/BitRoute.Infrastructure --startup-project src/BitRoute.Infrastructure
 
 # 4. Run the API
 dotnet run --project src/BitRoute.Api
