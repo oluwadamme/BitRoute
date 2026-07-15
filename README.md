@@ -28,13 +28,13 @@ A route is an ordered sequence of stops. Take a route A, B, C, D, E. Those four 
 
 Give each stop an index along the route:
 
-```
+```text
 A = 0    B = 1    C = 2    D = 3    E = 4
 ```
 
 A booking occupies a seat over the half-open interval `[boarding_index, alighting_index)`. A trip from A to C occupies `[0, 2)`. A trip from C to E occupies `[2, 4)`. Those two intervals do not overlap, so the same seat can serve both passengers.
 
-```
+```text
 Route:   A --------- B --------- C --------- D --------- E
 Seat 1:  | Passenger 1 (A to C)  | Passenger 2 (C to E)  |
 Seat 2:  | Passenger 3 (A to E)                          |
@@ -47,7 +47,7 @@ Seat 1 is the whole idea: one physical seat, two paying passengers, no conflict.
 
 Two bookings on the same seat conflict if and only if their intervals overlap:
 
-```
+```text
 ExistingStart < RequestedEnd  AND  ExistingEnd > RequestedStart
 ```
 
@@ -155,7 +155,7 @@ Pricing for a journey is the sum of the `ScheduleLeg` fares for the legs travers
 
 ## Booking lifecycle
 
-```
+```text
    create booking
         |
         v
@@ -178,11 +178,13 @@ A booking is created in `HELD` state, which reserves the seat and starts an expi
 
 Passwords are hashed with ASP.NET Core Identity. Login issues a short-lived JWT access token carrying the user's claims, paired with a refresh token whose sliding expiration is tracked in Redis rather than the primary database. Each refresh extends the window and rotates the token, which limits the damage from a leaked token. Authorization is policy-based and ownership-aware: an operator manages only their own schedules, a passenger sees only their own bookings.
 
+For a plain-language walkthrough of the refresh-token design (rotation, token families, reuse detection, and the atomic consume step), see [docs/refresh-token-system.md](docs/refresh-token-system.md).
+
 ## Payments
 
 Payment is tied to the hold, so a seat is never confirmed without money and never blocked indefinitely without payment.
 
-```
+```text
 create booking (HELD)
         |
         v

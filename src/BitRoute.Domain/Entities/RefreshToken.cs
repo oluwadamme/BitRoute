@@ -69,6 +69,25 @@ public sealed class RefreshToken
     }
 
     /// <summary>
+    /// Rebuilds a token from persisted state. For store implementations only; application
+    /// code issues tokens through <see cref="IssueForNewSession"/> or <see cref="IssueNextInSession"/>.
+    /// </summary>
+    public static RefreshToken Rehydrate(
+        Guid id,
+        Guid sessionId,
+        Guid userId,
+        string tokenHash,
+        DateTimeOffset createdAt,
+        DateTimeOffset expiresAt,
+        DateTimeOffset? consumedAt,
+        DateTimeOffset? revokedAt)
+        => new(id, sessionId, userId, tokenHash, createdAt, expiresAt)
+        {
+            ConsumedAt = consumedAt,
+            RevokedAt = revokedAt,
+        };
+
+    /// <summary>
     /// A token is usable only if it has not been consumed, has not been revoked,
     /// and has not expired.
     /// </summary>

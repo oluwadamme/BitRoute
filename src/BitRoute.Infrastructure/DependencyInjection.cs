@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using StackExchange.Redis;
 
 namespace BitRoute.Infrastructure;
 
@@ -48,6 +49,14 @@ public static class DependencyInjection
 
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<ITokenGenerator, JwtTokenGenerator>();
+
+        var redisConnectionString = configuration.GetConnectionString("Redis")
+            ?? throw new InvalidOperationException(
+                "Connection string 'Redis' is not configured. Set ConnectionStrings__Redis.");
+        services.AddSingleton<IConnectionMultiplexer>(
+            _ => ConnectionMultiplexer.Connect(redisConnectionString));
+        services.AddSingleton<IRefreshTokenCrypto, RefreshTokenCrypto>();
+        services.AddSingleton<IRefreshTokenStore, RedisRefreshTokenStore>();
 
         return services;
     }
