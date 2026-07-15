@@ -2,6 +2,7 @@ services:
   postgres:
     image: postgres:17-alpine
     container_name: bitroute-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_DB: bitroute
       POSTGRES_USER: bitroute
@@ -19,6 +20,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: bitroute-redis
+    restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:

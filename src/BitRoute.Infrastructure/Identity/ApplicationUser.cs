@@ -10,5 +10,11 @@ namespace BitRoute.Infrastructure.Identity;
 /// </summary>
 public sealed class ApplicationUser : IdentityUser<Guid>
 {
+    /// <summary>
+    /// Single free-text name rather than first/last: names do not split reliably
+    /// across cultures, and no feature needs the parts separated.
+    /// </summary>
+    public string FullName { get; set; } = string.Empty;
+
     public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.UtcNow;
 }

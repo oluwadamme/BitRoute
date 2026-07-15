@@ -10,7 +10,7 @@ public sealed class RedisRefreshTokenStoreTests : IAsyncLifetime
 {
     private static readonly TimeSpan Lifetime = TimeSpan.FromDays(30);
 
-    private readonly RedisContainer _container = new RedisBuilder().Build();
+    private readonly RedisContainer _container = new RedisBuilder("redis:7-alpine").Build();
     private IConnectionMultiplexer _redis = null!;
     private RedisRefreshTokenStore _store = null!;
 
