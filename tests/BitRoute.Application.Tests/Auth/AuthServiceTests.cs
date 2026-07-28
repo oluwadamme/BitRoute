@@ -1,3 +1,4 @@
+using BitRoute.Application;
 using BitRoute.Application.Auth;
 using BitRoute.Application.Common;
 using BitRoute.Domain.Entities;
@@ -48,12 +49,14 @@ public class AuthServiceTests
         var result = await CreateService().RegisterAsync(
             new RegisterRequest("ada@example.com", "password-8", "Ada Lovelace"));
 
+        Assert.True(result.Status);
+        Assert.NotNull(result.Data);
         var stored = Assert.Single(_store.Saved);
         Assert.Equal(UserId, stored.UserId);
-        Assert.Equal(FakeCrypto.HashOf(result.RefreshToken), stored.TokenHash);
+        Assert.Equal(FakeCrypto.HashOf(result.Data.RefreshToken), stored.TokenHash);
         Assert.Equal(Now.AddDays(30), stored.ExpiresAt);
-        Assert.Equal(Now.AddMinutes(60), result.AccessTokenExpiresAt);
-        Assert.NotEmpty(result.AccessToken);
+        Assert.Equal(Now.AddMinutes(60), result.Data.AccessTokenExpiresAt);
+        Assert.NotEmpty(result.Data.AccessToken);
     }
 
     [Fact]
@@ -80,13 +83,17 @@ public class AuthServiceTests
     {
         var service = CreateService();
         var login = await service.LoginAsync(new LoginRequest("ada@example.com", "password-8"));
+        Assert.True(login.Status);
+        Assert.NotNull(login.Data);
         var firstSession = _store.Saved[0].SessionId;
 
-        var refreshed = await service.RefreshAsync(new RefreshRequest(login.RefreshToken));
+        var refreshed = await service.RefreshAsync(new RefreshRequest(login.Data.RefreshToken));
+        Assert.True(refreshed.Status);
+        Assert.NotNull(refreshed.Data);
 
         Assert.Equal(2, _store.Saved.Count);
         Assert.Equal(firstSession, _store.Saved[1].SessionId);
-        Assert.NotEqual(login.RefreshToken, refreshed.RefreshToken);
+        Assert.NotEqual(login.Data.RefreshToken, refreshed.Data.RefreshToken);
         Assert.NotNull(_store.Saved[0].ConsumedAt);
     }
 
@@ -95,10 +102,12 @@ public class AuthServiceTests
     {
         var service = CreateService();
         var login = await service.LoginAsync(new LoginRequest("ada@example.com", "password-8"));
-        await service.RefreshAsync(new RefreshRequest(login.RefreshToken));
+        Assert.True(login.Status);
+        Assert.NotNull(login.Data);
+        await service.RefreshAsync(new RefreshRequest(login.Data.RefreshToken));
 
         await Assert.ThrowsAsync<RefreshTokenReuseException>(
-            () => service.RefreshAsync(new RefreshRequest(login.RefreshToken)));
+            () => service.RefreshAsync(new RefreshRequest(login.Data.RefreshToken)));
 
         Assert.Equal([_store.Saved[0].SessionId], _store.RevokedSessions);
     }
@@ -108,10 +117,12 @@ public class AuthServiceTests
     {
         var service = CreateService();
         var login = await service.LoginAsync(new LoginRequest("ada@example.com", "password-8"));
+        Assert.True(login.Status);
+        Assert.NotNull(login.Data);
         _identity.UserVanished = true;
 
         await Assert.ThrowsAsync<InvalidRefreshTokenException>(
-            () => service.RefreshAsync(new RefreshRequest(login.RefreshToken)));
+            () => service.RefreshAsync(new RefreshRequest(login.Data.RefreshToken)));
     }
 
     [Fact]
@@ -126,8 +137,11 @@ public class AuthServiceTests
     {
         var service = CreateService();
         var login = await service.LoginAsync(new LoginRequest("ada@example.com", "password-8"));
+        Assert.True(login.Status);
+        Assert.NotNull(login.Data);
 
-        await service.LogoutAsync(new LogoutRequest(login.RefreshToken));
+        var result = await service.LogoutAsync(new LogoutRequest(login.Data.RefreshToken));
+        Assert.True(result.Status);
 
         Assert.Equal([_store.Saved[0].SessionId], _store.RevokedSessions);
     }
@@ -135,7 +149,8 @@ public class AuthServiceTests
     [Fact]
     public async Task Logout_WithUnknownToken_IsANoOp()
     {
-        await CreateService().LogoutAsync(new LogoutRequest("never-issued"));
+        var result = await CreateService().LogoutAsync(new LogoutRequest("never-issued"));
+        Assert.True(result.Status);
 
         Assert.Empty(_store.RevokedSessions);
     }

@@ -42,7 +42,7 @@ public sealed class AuthService : IAuthService
         _validator = validator;
     }
 
-    public async Task<AuthResult> RegisterAsync(
+    public async Task<ApiResponse<AuthResult>> RegisterAsync(
         RegisterRequest request, CancellationToken cancellationToken = default)
     {
         await _validator.ValidateAndThrowAsync(request, cancellationToken);
@@ -52,10 +52,11 @@ public sealed class AuthService : IAuthService
         var user = await _identity.CreateUserAsync(
             request.Email, request.Password, request.FullName, UserRole.Passenger, cancellationToken);
 
-        return await StartSessionAsync(user, cancellationToken);
+        var result = await StartSessionAsync(user, cancellationToken);
+        return ApiResponse.Success(result, "Account created.");
     }
 
-    public async Task<AuthResult> LoginAsync(
+    public async Task<ApiResponse<AuthResult>> LoginAsync(
         LoginRequest request, CancellationToken cancellationToken = default)
     {
         await _validator.ValidateAndThrowAsync(request, cancellationToken);
@@ -63,10 +64,11 @@ public sealed class AuthService : IAuthService
         var user = await _identity.VerifyCredentialsAsync(
             request.Email, request.Password, cancellationToken);
 
-        return await StartSessionAsync(user, cancellationToken);
+        var result = await StartSessionAsync(user, cancellationToken);
+        return ApiResponse.Success(result, "Login successful.");
     }
 
-    public async Task<AuthResult> RefreshAsync(
+    public async Task<ApiResponse<AuthResult>> RefreshAsync(
         RefreshRequest request, CancellationToken cancellationToken = default)
     {
         await _validator.ValidateAndThrowAsync(request, cancellationToken);
@@ -94,10 +96,11 @@ public sealed class AuthService : IAuthService
         await _store.SaveAsync(next, cancellationToken);
 
         var access = _tokens.GenerateAccessToken(user.Id, user.Email, user.Roles);
-        return new AuthResult(access.Token, access.ExpiresAt, rawNext);
+        var result = new AuthResult(access.Token, access.ExpiresAt, rawNext);
+        return ApiResponse.Success(result, "Token refreshed.");
     }
 
-    public async Task LogoutAsync(
+    public async Task<ApiResponse<object>> LogoutAsync(
         LogoutRequest request, CancellationToken cancellationToken = default)
     {
         await _validator.ValidateAndThrowAsync(request, cancellationToken);
@@ -108,6 +111,8 @@ public sealed class AuthService : IAuthService
         {
             await _store.RevokeSessionAsync(token.SessionId, cancellationToken);
         }
+
+        return ApiResponse.SuccessMessage("Logged out.");
     }
 
     private async Task<AuthResult> StartSessionAsync(

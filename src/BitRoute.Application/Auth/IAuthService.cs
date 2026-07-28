@@ -6,8 +6,8 @@ namespace BitRoute.Application.Auth;
 /// </summary>
 public interface IAuthService
 {
-    Task<AuthResult> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken = default);
-    Task<AuthResult> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default);
-    Task<AuthResult> RefreshAsync(RefreshRequest request, CancellationToken cancellationToken = default);
-    Task LogoutAsync(LogoutRequest request, CancellationToken cancellationToken = default);
+    Task<ApiResponse<AuthResult>> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken = default);
+    Task<ApiResponse<AuthResult>> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default);
+    Task<ApiResponse<AuthResult>> RefreshAsync(RefreshRequest request, CancellationToken cancellationToken = default);
+    Task<ApiResponse<object>> LogoutAsync(LogoutRequest request, CancellationToken cancellationToken = default);
 }
