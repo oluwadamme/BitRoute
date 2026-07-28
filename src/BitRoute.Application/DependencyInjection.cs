@@ -1,4 +1,5 @@
 using BitRoute.Application.Auth;
+using BitRoute.Application.Booking;
 using BitRoute.Application.Common;
 using FluentValidation;
 using Microsoft.Extensions.Configuration;
@@ -22,6 +23,7 @@ public static class DependencyInjection
         services.AddValidatorsFromAssemblyContaining<RegisterRequestValidator>();
         services.AddScoped<IRequestValidator, RequestValidator>();
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IBookingService, BookingService>();
 
         return services;
     }

@@ -20,6 +20,7 @@ using Xunit;
 
 namespace BitRoute.Api.Tests;
 
+[Collection("IntegrationTests")]
 public class AuthControllerTests : IClassFixture<WebApplicationFactory<Program>>, IDisposable
 {
     private readonly string _dbFile;

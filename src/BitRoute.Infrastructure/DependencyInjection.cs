@@ -71,6 +71,14 @@ public static class DependencyInjection
         services.AddSingleton<IRefreshTokenCrypto, RefreshTokenCrypto>();
         services.AddSingleton<IRefreshTokenStore, RedisRefreshTokenStore>();
 
+        services.AddScoped<IUnitOfWork, Persistence.Repositories.UnitOfWork>();
+        services.AddScoped<IRouteRepository, Persistence.Repositories.RouteRepository>();
+        services.AddScoped<IVehicleRepository, Persistence.Repositories.VehicleRepository>();
+        services.AddScoped<IScheduleRepository, Persistence.Repositories.ScheduleRepository>();
+        services.AddScoped<IBookingRepository, Persistence.Repositories.BookingRepository>();
+
+        services.AddHostedService<BackgroundServices.ExpiredHoldSweeper>();
+
         return services;
     }
 }

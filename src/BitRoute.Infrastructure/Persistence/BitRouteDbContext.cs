@@ -1,3 +1,4 @@
+using BitRoute.Domain.Entities;
 using BitRoute.Infrastructure.Identity;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
@@ -18,6 +19,14 @@ public sealed class BitRouteDbContext
         : base(options)
     {
     }
+
+    public DbSet<Route> Routes => Set<Route>();
+    public DbSet<Stop> Stops => Set<Stop>();
+    public DbSet<Vehicle> Vehicles => Set<Vehicle>();
+    public DbSet<Seat> Seats => Set<Seat>();
+    public DbSet<Schedule> Schedules => Set<Schedule>();
+    public DbSet<ScheduleLeg> ScheduleLegs => Set<ScheduleLeg>();
+    public DbSet<SeatBooking> SeatBookings => Set<SeatBooking>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

@@ -97,6 +97,7 @@ using (var scope = app.Services.CreateScope())
 // Idempotent: creates the Passenger/Operator/Admin role rows if missing.
 await app.Services.SeedIdentityRolesAsync();
 await app.Services.SeedAdminUserAsync(app.Configuration);
+await app.Services.SeedBookingDataAsync();
 
 // Configure the HTTP request pipeline. The exception middleware sits first so it
 // can translate anything thrown below it.

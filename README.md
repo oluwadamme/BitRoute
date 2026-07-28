@@ -293,6 +293,12 @@ Built as a series of phases, each shippable on its own. Build a thin vertical sl
   - [x] Cross-cutting: admin seeding and the admin-only operator provisioning path.
   - [x] Tests: login, refresh rotation, reuse detection revoking the family, and authorization failures.
 - **Phase 3, high-concurrency overlap engine**: the `Route -> Schedule -> ScheduleLeg -> SeatBooking` schema, the leg-overlap query, Serializable transactions with a retry loop, and the exclusion constraint backstop. Plus the hold-and-expiry pattern.
+  - [x] Relational schema: `Route`, `Stop`, `Vehicle`, `Seat`, `Schedule`, `ScheduleLeg`, and `SeatBooking` mapped via EF Core.
+  - [x] Segment-based availability: query logic verifies leg overlaps using index bounds `[boardingIndex, alightingIndex)`.
+  - [x] Concurrency resilience: Serializable transaction runner in `UnitOfWork` with SQLSTATE `40001` conflict identification and exponential backoff retry.
+  - [x] DB Exclusion Constraint: PostgreSQL `btree_gist` extension and range-level exclusion constraint preventing overlapping legs on the same seat.
+  - [x] Hold-and-expiry lifecycle: seat reservations default to a 10-minute hold window, swept and cleared by the `ExpiredHoldSweeper` background service.
+  - [x] Testing quality gate: complete unit tests (`BookingServiceTests`) and multi-threaded concurrency integration tests (`ConcurrencyTests`) verifying conflict rejection.
 - **Phase 4, webhook architecture**: the Stripe server-side integration, a signature-verified callback endpoint, idempotent event handling, and MediatR notifications on confirmation.
 - **Phase 5, real-time WebSockets**: the SignalR hub, and mapping incoming GPS pings onto active leg windows.
 - **Phase 6, testing quality gates**: unit tests over the overlap logic, Testcontainers integration tests, and the multi-threaded collision test that hits identical seat paths in parallel.
