@@ -5,6 +5,13 @@ namespace BitRoute.Application;
 /// { "status": true | false, "message": ..., "data": ... }.
 /// Inner layers define this so both Application services and Api layer share the contract.
 /// </summary>
+/// <example>
+/// {
+///   "status": true,
+///   "message": "Request successful.",
+///   "data": null
+/// }
+/// </example>
 public sealed record ApiResponse<T>(bool Status, string Message, T? Data);
 
 public static class ApiResponse

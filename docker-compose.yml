@@ -31,6 +31,27 @@ services:
       timeout: 3s
       retries: 10
 
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bitroute-api
+    restart: unless-stopped
+    ports:
+      - "5001:5000"
+    env_file:
+      - src/BitRoute.Api/.env
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:5000
+      - ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=bitroute;Username=bitroute;Password=bitroute
+      - ConnectionStrings__Redis=redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
 volumes:
   postgres-data:
   redis-data:

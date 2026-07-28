@@ -6,7 +6,9 @@ using BitRoute.Application;
 using BitRoute.Domain.Enums;
 using BitRoute.Infrastructure;
 using BitRoute.Infrastructure.Identity;
+using BitRoute.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 
@@ -77,6 +79,13 @@ builder.Services.AddAuthorizationBuilder()
     .AddPolicy(AuthPolicies.OperatorOnly, p => p.RequireRole(nameof(UserRole.Operator)));
 
 var app = builder.Build();
+
+// Apply migrations on startup automatically.
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<BitRouteDbContext>();
+    await dbContext.Database.MigrateAsync();
+}
 
 // Idempotent: creates the Passenger/Operator/Admin role rows if missing.
 await app.Services.SeedIdentityRolesAsync();
