@@ -115,6 +115,17 @@ public sealed class AuthService : IAuthService
         return ApiResponse.SuccessMessage("Logged out.");
     }
 
+    public async Task<ApiResponse<AuthUser>> ProvisionOperatorAsync(
+        ProvisionOperatorRequest request, CancellationToken cancellationToken = default)
+    {
+        await _validator.ValidateAndThrowAsync(request, cancellationToken);
+
+        var user = await _identity.CreateUserAsync(
+            request.Email, request.Password, request.FullName, UserRole.Operator, cancellationToken);
+
+        return ApiResponse.Success(user, "Operator provisioned successfully.");
+    }
+
     private async Task<AuthResult> StartSessionAsync(
         AuthUser user, CancellationToken cancellationToken)
     {

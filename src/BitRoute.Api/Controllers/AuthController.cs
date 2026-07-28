@@ -1,5 +1,6 @@
 using BitRoute.Application;
 using BitRoute.Application.Auth;
+using BitRoute.Domain.ValueObjects;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.JsonWebTokens;
@@ -47,6 +48,13 @@ public sealed class AuthController : ControllerBase
     public async Task<ActionResult<ApiResponse<object>>> Logout(
         LogoutRequest request, CancellationToken cancellationToken)
         => Ok(await _auth.LogoutAsync(request, cancellationToken));
+
+    /// <summary>Provisions a new operator user account (admin-only).</summary>
+    [Authorize(Policy = AuthPolicies.AdminOnly)]
+    [HttpPost("operators")]
+    public async Task<ActionResult<ApiResponse<AuthUser>>> ProvisionOperator(
+        ProvisionOperatorRequest request, CancellationToken cancellationToken)
+        => Ok(await _auth.ProvisionOperatorAsync(request, cancellationToken));
 
     /// <summary>
     /// The caller's identity as the bearer token proves it. Exists to verify the JWT

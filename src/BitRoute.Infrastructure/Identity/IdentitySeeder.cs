@@ -1,5 +1,6 @@
 using BitRoute.Domain.Enums;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace BitRoute.Infrastructure.Identity;
@@ -26,6 +27,47 @@ public static class IdentitySeeder
                     throw new InvalidOperationException(
                         $"Seeding role '{role}' failed: {string.Join(" ", result.Errors.Select(e => e.Description))}");
                 }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Idempotently seeds the administrator account on startup.
+    /// Values are loaded from Configuration keys: Admin:Email, Admin:Password, Admin:FullName.
+    /// </summary>
+    public static async Task SeedAdminUserAsync(this IServiceProvider services, IConfiguration configuration)
+    {
+        await using var scope = services.CreateAsyncScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+
+        var email = configuration["Admin:Email"] ?? "admin@bitroute.com";
+        var password = configuration["Admin:Password"] ?? "AdminPassword123!";
+        var fullName = configuration["Admin:FullName"] ?? "System Administrator";
+
+        var existingUser = await userManager.FindByEmailAsync(email);
+        if (existingUser is null)
+        {
+            var adminUser = new ApplicationUser
+            {
+                Id = Guid.NewGuid(),
+                UserName = email,
+                Email = email,
+                FullName = fullName.Trim(),
+                EmailConfirmed = true
+            };
+
+            var result = await userManager.CreateAsync(adminUser, password);
+            if (!result.Succeeded)
+            {
+                throw new InvalidOperationException(
+                    $"Seeding Admin user failed: {string.Join(" ", result.Errors.Select(e => e.Description))}");
+            }
+
+            var roleResult = await userManager.AddToRoleAsync(adminUser, UserRole.Admin.ToString());
+            if (!roleResult.Succeeded)
+            {
+                throw new InvalidOperationException(
+                    $"Assigning Admin role failed: {string.Join(" ", roleResult.Errors.Select(e => e.Description))}");
             }
         }
     }

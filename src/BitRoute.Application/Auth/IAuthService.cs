@@ -1,3 +1,5 @@
+using BitRoute.Domain.ValueObjects;
+
 namespace BitRoute.Application.Auth;
 
 /// <summary>
@@ -10,4 +12,5 @@ public interface IAuthService
     Task<ApiResponse<AuthResult>> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default);
     Task<ApiResponse<AuthResult>> RefreshAsync(RefreshRequest request, CancellationToken cancellationToken = default);
     Task<ApiResponse<object>> LogoutAsync(LogoutRequest request, CancellationToken cancellationToken = default);
+    Task<ApiResponse<AuthUser>> ProvisionOperatorAsync(ProvisionOperatorRequest request, CancellationToken cancellationToken = default);
 }

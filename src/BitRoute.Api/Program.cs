@@ -84,11 +84,19 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<BitRouteDbContext>();
-    await dbContext.Database.MigrateAsync();
+    if (dbContext.Database.IsSqlite())
+    {
+        await dbContext.Database.EnsureCreatedAsync();
+    }
+    else
+    {
+        await dbContext.Database.MigrateAsync();
+    }
 }
 
 // Idempotent: creates the Passenger/Operator/Admin role rows if missing.
 await app.Services.SeedIdentityRolesAsync();
+await app.Services.SeedAdminUserAsync(app.Configuration);
 
 // Configure the HTTP request pipeline. The exception middleware sits first so it
 // can translate anything thrown below it.
@@ -113,4 +121,6 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+public partial class Program { }
 

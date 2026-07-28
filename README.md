@@ -290,8 +290,8 @@ Built as a series of phases, each shippable on its own. Build a thin vertical sl
   - [x] Application: auth service orchestrating register, login, refresh, and logout, with record DTOs and FluentValidation.
   - [x] Api: auth endpoints (`/auth/register`, `/auth/login`, `/auth/refresh`, logout), JWT bearer auth, policy-based authorization, and DI registration.
   - [x] Api: map the new auth exceptions in `ExceptionMiddleware`.
-  - [ ] Cross-cutting: admin seeding and the admin-only operator provisioning path.
-  - [ ] Tests: login, refresh rotation, reuse detection revoking the family, and authorization failures.
+  - [x] Cross-cutting: admin seeding and the admin-only operator provisioning path.
+  - [x] Tests: login, refresh rotation, reuse detection revoking the family, and authorization failures.
 - **Phase 3, high-concurrency overlap engine**: the `Route -> Schedule -> ScheduleLeg -> SeatBooking` schema, the leg-overlap query, Serializable transactions with a retry loop, and the exclusion constraint backstop. Plus the hold-and-expiry pattern.
 - **Phase 4, webhook architecture**: the Stripe server-side integration, a signature-verified callback endpoint, idempotent event handling, and MediatR notifications on confirmation.
 - **Phase 5, real-time WebSockets**: the SignalR hub, and mapping incoming GPS pings onto active leg windows.

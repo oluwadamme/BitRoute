@@ -48,3 +48,13 @@ public sealed record LogoutRequest(string RefreshToken);
 /// }
 /// </example>
 public sealed record AuthResult(string AccessToken, DateTimeOffset AccessTokenExpiresAt, string RefreshToken);
+
+/// <summary>Request DTO for provisioning an operator user account (admin-only).</summary>
+/// <example>
+/// {
+///   "email": "operator@bitroute.com",
+///   "password": "OperatorPassword123!",
+///   "fullName": "Jane Operator"
+/// }
+/// </example>
+public sealed record ProvisionOperatorRequest(string Email, string Password, string FullName);

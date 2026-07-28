@@ -24,7 +24,14 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException(
                 "Connection string 'Postgres' is not configured. Set ConnectionStrings__Postgres.");
 
-        services.AddDbContext<BitRouteDbContext>(options => options.UseNpgsql(connectionString));
+        if (connectionString.StartsWith("DataSource=") || connectionString.StartsWith("Data Source="))
+        {
+            services.AddDbContext<BitRouteDbContext>(options => options.UseSqlite(connectionString));
+        }
+        else
+        {
+            services.AddDbContext<BitRouteDbContext>(options => options.UseNpgsql(connectionString));
+        }
 
         services
             .AddIdentityCore<ApplicationUser>(options =>

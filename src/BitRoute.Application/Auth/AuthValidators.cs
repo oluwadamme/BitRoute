@@ -37,3 +37,13 @@ public sealed class LogoutRequestValidator : AbstractValidator<LogoutRequest>
         RuleFor(r => r.RefreshToken).NotEmpty();
     }
 }
+
+public sealed class ProvisionOperatorRequestValidator : AbstractValidator<ProvisionOperatorRequest>
+{
+    public ProvisionOperatorRequestValidator()
+    {
+        RuleFor(r => r.Email).NotEmpty().EmailAddress().MaximumLength(256);
+        RuleFor(r => r.Password).NotEmpty().MinimumLength(8).MaximumLength(128);
+        RuleFor(r => r.FullName).NotEmpty().MaximumLength(100);
+    }
+}

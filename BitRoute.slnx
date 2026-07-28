@@ -6,6 +6,7 @@
     <Project Path="src/BitRoute.Infrastructure/BitRoute.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/BitRoute.Api.Tests/BitRoute.Api.Tests.csproj" />
     <Project Path="tests/BitRoute.Application.Tests/BitRoute.Application.Tests.csproj" />
     <Project Path="tests/BitRoute.ArchitectureTests/BitRoute.ArchitectureTests.csproj" />
     <Project Path="tests/BitRoute.Domain.Tests/BitRoute.Domain.Tests.csproj" />
