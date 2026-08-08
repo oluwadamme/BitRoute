@@ -52,6 +52,8 @@ public sealed class ExceptionMiddleware
             SeatUnavailableException e => (StatusCodes.Status409Conflict, ApiResponse.Error(e.Message)),
             HoldExpiredException e => (StatusCodes.Status410Gone, ApiResponse.Error(e.Message)),
             ScheduleNotFoundException e => (StatusCodes.Status404NotFound, ApiResponse.Error(e.Message)),
+            RouteNotFoundException e => (StatusCodes.Status404NotFound, ApiResponse.Error(e.Message)),
+            VehicleNotFoundException e => (StatusCodes.Status404NotFound, ApiResponse.Error(e.Message)),
             InvalidBookingTransitionException e => (StatusCodes.Status400BadRequest, ApiResponse.Error(e.Message)),
             BookingDomainException e => (StatusCodes.Status400BadRequest, ApiResponse.Error(e.Message)),
             // Safety net: a DomainException without a specific mapping is a client-visible

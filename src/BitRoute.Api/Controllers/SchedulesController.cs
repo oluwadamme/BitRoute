@@ -23,7 +23,17 @@ public sealed class SchedulesController : ControllerBase
         CreateScheduleRequest request, CancellationToken cancellationToken)
     {
         var response = await _booking.CreateScheduleAsync(request, cancellationToken);
-        return CreatedAtAction(null, new { id = response.Data }, response);
+        return CreatedAtAction(nameof(GetSchedule), new { id = response.Data }, response);
+    }
+
+    /// <summary>Retrieves details of a schedule by ID (authenticated users).</summary>
+    [Authorize]
+    [HttpGet("{id:guid}", Name = nameof(GetSchedule))]
+    public async Task<ActionResult<ApiResponse<ScheduleDto>>> GetSchedule(
+        Guid id, CancellationToken cancellationToken)
+    {
+        var response = await _booking.GetScheduleAsync(id, cancellationToken);
+        return Ok(response);
     }
 
     /// <summary>Retrieves available seats and price for a schedule on a travel date (authenticated users).</summary>

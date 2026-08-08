@@ -49,6 +49,15 @@ public sealed class BookingService : IBookingService
         return ApiResponse.Success(route.Id, "Route created successfully.");
     }
 
+    public async Task<ApiResponse<RouteDto>> GetRouteAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var route = await _routeRepository.GetByIdAsync(id, cancellationToken);
+        if (route is null) throw new RouteNotFoundException($"Route '{id}' not found.");
+
+        var dto = new RouteDto(route.Id, route.Name, route.Stops.OrderBy(s => s.Index).Select(s => s.Name).ToList());
+        return ApiResponse.Success(dto, "Route retrieved successfully.");
+    }
+
     public async Task<ApiResponse<Guid>> CreateVehicleAsync(CreateVehicleRequest request, CancellationToken cancellationToken = default)
     {
         await _validator.ValidateAndThrowAsync(request, cancellationToken);
@@ -60,15 +69,24 @@ public sealed class BookingService : IBookingService
         return ApiResponse.Success(vehicle.Id, "Vehicle created successfully.");
     }
 
+    public async Task<ApiResponse<VehicleDto>> GetVehicleAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var vehicle = await _vehicleRepository.GetByIdAsync(id, cancellationToken);
+        if (vehicle is null) throw new VehicleNotFoundException($"Vehicle '{id}' not found.");
+
+        var dto = new VehicleDto(vehicle.Id, vehicle.Name, vehicle.Seats.Select(s => s.Number).ToList());
+        return ApiResponse.Success(dto, "Vehicle retrieved successfully.");
+    }
+
     public async Task<ApiResponse<Guid>> CreateScheduleAsync(CreateScheduleRequest request, CancellationToken cancellationToken = default)
     {
         await _validator.ValidateAndThrowAsync(request, cancellationToken);
 
         var routeExists = await _routeRepository.ExistsAsync(request.RouteId, cancellationToken);
-        if (!routeExists) throw new BookingDomainException($"Route '{request.RouteId}' not found.");
+        if (!routeExists) throw new RouteNotFoundException($"Route '{request.RouteId}' not found.");
 
         var vehicleExists = await _vehicleRepository.ExistsAsync(request.VehicleId, cancellationToken);
-        if (!vehicleExists) throw new BookingDomainException($"Vehicle '{request.VehicleId}' not found.");
+        if (!vehicleExists) throw new VehicleNotFoundException($"Vehicle '{request.VehicleId}' not found.");
 
         var legs = request.Legs.Select(l => ScheduleLeg.Create(l.StartStopIndex, l.EndStopIndex, l.Fare));
         var schedule = Schedule.Create(request.RouteId, request.VehicleId, request.DepartureTimeOfDay, legs);
@@ -77,6 +95,18 @@ public sealed class BookingService : IBookingService
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return ApiResponse.Success(schedule.Id, "Schedule created successfully.");
+    }
+
+    public async Task<ApiResponse<ScheduleDto>> GetScheduleAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var schedule = await _scheduleRepository.GetByIdAsync(id, cancellationToken);
+        if (schedule is null) throw new ScheduleNotFoundException($"Schedule '{id}' not found.");
+
+        var legDtos = schedule.ScheduleLegs
+            .Select(l => new ScheduleLegDto(l.Id, l.StartStopIndex, l.EndStopIndex, l.Fare))
+            .ToList();
+        var dto = new ScheduleDto(schedule.Id, schedule.RouteId, schedule.VehicleId, schedule.DepartureTimeOfDay, legDtos);
+        return ApiResponse.Success(dto, "Schedule retrieved successfully.");
     }
 
     public async Task<ApiResponse<ScheduleAvailabilityResponse>> GetScheduleAvailabilityAsync(

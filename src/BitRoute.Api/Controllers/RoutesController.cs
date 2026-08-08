@@ -23,6 +23,16 @@ public sealed class RoutesController : ControllerBase
         CreateRouteRequest request, CancellationToken cancellationToken)
     {
         var response = await _booking.CreateRouteAsync(request, cancellationToken);
-        return CreatedAtAction(null, new { id = response.Data }, response);
+        return CreatedAtAction(nameof(GetRoute), new { id = response.Data }, response);
+    }
+
+    /// <summary>Retrieves details of a route by ID (authenticated users).</summary>
+    [Authorize]
+    [HttpGet("{id:guid}", Name = nameof(GetRoute))]
+    public async Task<ActionResult<ApiResponse<RouteDto>>> GetRoute(
+        Guid id, CancellationToken cancellationToken)
+    {
+        var response = await _booking.GetRouteAsync(id, cancellationToken);
+        return Ok(response);
     }
 }

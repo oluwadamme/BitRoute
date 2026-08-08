@@ -82,3 +82,20 @@ public sealed record ScheduleAvailabilityResponse(
     DateOnly TravelDate,
     int Price,
     List<SeatAvailabilityDto> Seats);
+
+/// <summary>Details of a Route.</summary>
+public sealed record RouteDto(Guid Id, string Name, List<string> Stops);
+
+/// <summary>Details of a Vehicle.</summary>
+public sealed record VehicleDto(Guid Id, string Name, List<string> Seats);
+
+/// <summary>Details of a Schedule Leg.</summary>
+public sealed record ScheduleLegDto(Guid Id, int StartStopIndex, int EndStopIndex, int Fare);
+
+/// <summary>Details of a Schedule.</summary>
+public sealed record ScheduleDto(
+    Guid Id,
+    Guid RouteId,
+    Guid VehicleId,
+    TimeOnly DepartureTimeOfDay,
+    List<ScheduleLegDto> Legs);

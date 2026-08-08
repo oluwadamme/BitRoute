@@ -4,9 +4,15 @@ public interface IBookingService
 {
     Task<ApiResponse<Guid>> CreateRouteAsync(CreateRouteRequest request, CancellationToken cancellationToken = default);
     
+    Task<ApiResponse<RouteDto>> GetRouteAsync(Guid id, CancellationToken cancellationToken = default);
+    
     Task<ApiResponse<Guid>> CreateVehicleAsync(CreateVehicleRequest request, CancellationToken cancellationToken = default);
     
+    Task<ApiResponse<VehicleDto>> GetVehicleAsync(Guid id, CancellationToken cancellationToken = default);
+    
     Task<ApiResponse<Guid>> CreateScheduleAsync(CreateScheduleRequest request, CancellationToken cancellationToken = default);
+
+    Task<ApiResponse<ScheduleDto>> GetScheduleAsync(Guid id, CancellationToken cancellationToken = default);
 
     Task<ApiResponse<ScheduleAvailabilityResponse>> GetScheduleAvailabilityAsync(
         Guid scheduleId,

@@ -23,6 +23,16 @@ public sealed class VehiclesController : ControllerBase
         CreateVehicleRequest request, CancellationToken cancellationToken)
     {
         var response = await _booking.CreateVehicleAsync(request, cancellationToken);
-        return CreatedAtAction(null, new { id = response.Data }, response);
+        return CreatedAtAction(nameof(GetVehicle), new { id = response.Data }, response);
+    }
+
+    /// <summary>Retrieves details of a vehicle by ID (authenticated users).</summary>
+    [Authorize]
+    [HttpGet("{id:guid}", Name = nameof(GetVehicle))]
+    public async Task<ActionResult<ApiResponse<VehicleDto>>> GetVehicle(
+        Guid id, CancellationToken cancellationToken)
+    {
+        var response = await _booking.GetVehicleAsync(id, cancellationToken);
+        return Ok(response);
     }
 }
