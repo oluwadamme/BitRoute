@@ -36,8 +36,16 @@ public sealed class SchedulesController : ControllerBase
         return Ok(response);
     }
 
-    /// <summary>Retrieves available seats and price for a schedule on a travel date (authenticated users).</summary>
-    [Authorize]
+    /// <summary>Lists all available schedule departures.</summary>
+    [HttpGet]
+    public async Task<ActionResult<ApiResponse<IReadOnlyCollection<ScheduleDto>>>> GetAllSchedules(
+        CancellationToken cancellationToken)
+    {
+        var response = await _booking.GetAllSchedulesAsync(cancellationToken);
+        return Ok(response);
+    }
+
+    /// <summary>Retrieves available seats and price for a schedule on a travel date.</summary>
     [HttpGet("{scheduleId:guid}/availability")]
     public async Task<ActionResult<ApiResponse<ScheduleAvailabilityResponse>>> GetAvailability(
         Guid scheduleId,

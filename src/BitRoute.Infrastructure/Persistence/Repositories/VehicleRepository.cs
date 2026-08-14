@@ -20,6 +20,13 @@ public sealed class VehicleRepository : IVehicleRepository
             .FirstOrDefaultAsync(v => v.Id == id, cancellationToken);
     }
 
+    public async Task<IReadOnlyCollection<Vehicle>> GetAllAsync(CancellationToken cancellationToken = default)
+    {
+        return await _db.Vehicles
+            .Include(v => v.Seats)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<bool> ExistsAsync(Guid id, CancellationToken cancellationToken = default)
     {
         return await _db.Vehicles

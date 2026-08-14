@@ -35,4 +35,13 @@ public sealed class VehiclesController : ControllerBase
         var response = await _booking.GetVehicleAsync(id, cancellationToken);
         return Ok(response);
     }
+
+    /// <summary>Lists all vehicles.</summary>
+    [HttpGet]
+    public async Task<ActionResult<ApiResponse<IReadOnlyCollection<VehicleDto>>>> GetAllVehicles(
+        CancellationToken cancellationToken)
+    {
+        var response = await _booking.GetAllVehiclesAsync(cancellationToken);
+        return Ok(response);
+    }
 }

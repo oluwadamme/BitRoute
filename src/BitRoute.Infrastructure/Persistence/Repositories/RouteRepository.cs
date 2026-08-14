@@ -20,6 +20,13 @@ public sealed class RouteRepository : IRouteRepository
             .FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
     }
 
+    public async Task<IReadOnlyCollection<Route>> GetAllAsync(CancellationToken cancellationToken = default)
+    {
+        return await _db.Routes
+            .Include(r => r.Stops)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<bool> ExistsAsync(Guid id, CancellationToken cancellationToken = default)
     {
         return await _db.Routes

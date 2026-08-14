@@ -35,4 +35,13 @@ public sealed class RoutesController : ControllerBase
         var response = await _booking.GetRouteAsync(id, cancellationToken);
         return Ok(response);
     }
+
+    /// <summary>Lists all available routes.</summary>
+    [HttpGet]
+    public async Task<ActionResult<ApiResponse<IReadOnlyCollection<RouteDto>>>> GetAllRoutes(
+        CancellationToken cancellationToken)
+    {
+        var response = await _booking.GetAllRoutesAsync(cancellationToken);
+        return Ok(response);
+    }
 }

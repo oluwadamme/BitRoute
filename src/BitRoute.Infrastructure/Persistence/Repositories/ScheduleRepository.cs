@@ -22,6 +22,15 @@ public sealed class ScheduleRepository : IScheduleRepository
             .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
     }
 
+    public async Task<IReadOnlyCollection<Schedule>> GetAllAsync(CancellationToken cancellationToken = default)
+    {
+        return await _db.Schedules
+            .Include(s => s.Route)
+                .ThenInclude(r => r.Stops)
+            .Include(s => s.ScheduleLegs)
+            .ToListAsync(cancellationToken);
+    }
+
     public void Add(Schedule schedule)
     {
         _db.Schedules.Add(schedule);
