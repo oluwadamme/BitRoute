@@ -56,6 +56,7 @@ public sealed class ExceptionMiddleware
             VehicleNotFoundException e => (StatusCodes.Status404NotFound, ApiResponse.Error(e.Message)),
             InvalidBookingTransitionException e => (StatusCodes.Status400BadRequest, ApiResponse.Error(e.Message)),
             BookingDomainException e => (StatusCodes.Status400BadRequest, ApiResponse.Error(e.Message)),
+            TelemetryNotFoundException e => (StatusCodes.Status404NotFound, ApiResponse.Error(e.Message)),
             // Safety net: a DomainException without a specific mapping is a client-visible
             // rule violation, not a server fault. Add a specific arm when one appears.
             DomainException e => (StatusCodes.Status400BadRequest, ApiResponse.Error(e.Message)),

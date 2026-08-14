@@ -58,4 +58,8 @@ public interface IBookingService
         Guid userId,
         string userRole,
         CancellationToken cancellationToken = default);
+
+    Task<ApiResponse<TelemetryLocationDto>> GetLatestTelemetryAsync(
+        Guid scheduleId,
+        CancellationToken cancellationToken = default);
 }

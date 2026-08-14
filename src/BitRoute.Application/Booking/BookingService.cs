@@ -16,6 +16,8 @@ public sealed class BookingService : IBookingService
     private readonly IBookingRepository _bookingRepository;
     private readonly IPaystackService _paystackService;
     private readonly IAvailabilityCache _cache;
+    private readonly ITelemetryCache _telemetryCache;
+    private readonly ITelemetryRepository _telemetryRepository;
     private readonly IRequestValidator _validator;
     private readonly TimeProvider _clock;
     private readonly ILogger<BookingService> _logger;
@@ -28,6 +30,8 @@ public sealed class BookingService : IBookingService
         IBookingRepository bookingRepository,
         IPaystackService paystackService,
         IAvailabilityCache cache,
+        ITelemetryCache telemetryCache,
+        ITelemetryRepository telemetryRepository,
         IRequestValidator validator,
         TimeProvider clock,
         ILogger<BookingService> logger)
@@ -39,6 +43,8 @@ public sealed class BookingService : IBookingService
         _bookingRepository = bookingRepository;
         _paystackService = paystackService;
         _cache = cache;
+        _telemetryCache = telemetryCache;
+        _telemetryRepository = telemetryRepository;
         _validator = validator;
         _clock = clock;
         _logger = logger;
@@ -349,4 +355,31 @@ public sealed class BookingService : IBookingService
             b.Status.ToString(),
             b.Price,
             b.HoldExpiry);
+
+    public async Task<ApiResponse<TelemetryLocationDto>> GetLatestTelemetryAsync(
+        Guid scheduleId, CancellationToken cancellationToken = default)
+    {
+        var cached = await _telemetryCache.GetLatestAsync(scheduleId, cancellationToken);
+        if (cached is not null)
+        {
+            return ApiResponse.Success(cached, "Latest telemetry location retrieved from cache.");
+        }
+
+        var latestLog = await _telemetryRepository.GetLatestByScheduleIdAsync(scheduleId, cancellationToken);
+        if (latestLog is null)
+        {
+            throw new TelemetryNotFoundException($"No telemetry location available for schedule '{scheduleId}'.");
+        }
+
+        var dto = new TelemetryLocationDto(
+            latestLog.ScheduleId,
+            latestLog.Latitude,
+            latestLog.Longitude,
+            latestLog.CurrentLegIndex,
+            latestLog.TimestampUtc);
+
+        await _telemetryCache.SetLatestAsync(scheduleId, dto, cancellationToken);
+
+        return ApiResponse.Success(dto, "Latest telemetry location retrieved from history log.");
+    }
 }

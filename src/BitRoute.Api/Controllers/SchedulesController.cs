@@ -58,4 +58,14 @@ public sealed class SchedulesController : ControllerBase
             scheduleId, travelDate, boardingIndex, alightingIndex, cancellationToken);
         return Ok(response);
     }
+
+    /// <summary>Retrieves the latest known GPS location ping for a schedule departure.</summary>
+    [HttpGet("{id:guid}/telemetry/latest")]
+    public async Task<ActionResult<ApiResponse<TelemetryLocationDto>>> GetLatestTelemetry(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var response = await _booking.GetLatestTelemetryAsync(id, cancellationToken);
+        return Ok(response);
+    }
 }

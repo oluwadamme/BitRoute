@@ -149,4 +149,17 @@ public sealed class RedisCacheService : ICacheService
             _logger.LogWarning(ex, "Redis KeyDelete failed for batch keys.");
         }
     }
+
+    public async Task SetGeoLocationAsync(string geoKey, string member, double longitude, double latitude, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var db = _redis.GetDatabase();
+            await db.GeoAddAsync(geoKey, longitude, latitude, member);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Redis GEOADD failed for member '{Member}' at [{Lat}, {Lng}].", member, latitude, longitude);
+        }
+    }
 }

@@ -8,7 +8,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using StackExchange.Redis;
-
+using BitRoute.Infrastructure.Caching;
+using BitRoute.Infrastructure.Persistence.Repositories;
+using BitRoute.Application.Booking;
 namespace BitRoute.Infrastructure;
 
 /// <summary>
@@ -77,15 +79,21 @@ public static class DependencyInjection
 
         services.AddHttpClient<IPaystackService, Payments.PaystackService>();
 
-        services.AddScoped<IUnitOfWork, Persistence.Repositories.UnitOfWork>();
-        services.AddScoped<IRouteRepository, Persistence.Repositories.RouteRepository>();
-        services.AddScoped<IVehicleRepository, Persistence.Repositories.VehicleRepository>();
-        services.AddScoped<IScheduleRepository, Persistence.Repositories.ScheduleRepository>();
-        services.AddScoped<IBookingRepository, Persistence.Repositories.BookingRepository>();
-        services.AddSingleton<BitRoute.Application.Booking.IAvailabilityCache, Caching.RedisAvailabilityCache>();
+        services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<IRouteRepository, RouteRepository>();
+        services.AddScoped<IVehicleRepository, VehicleRepository>();
+        services.AddScoped<IScheduleRepository, ScheduleRepository>();
+        services.AddScoped<IBookingRepository, BookingRepository>();
+        services.AddScoped<ITelemetryRepository, TelemetryRepository>();
+        services.AddSingleton<IAvailabilityCache, RedisAvailabilityCache>();
+        services.AddSingleton<ITelemetryCache, RedisTelemetryCache>();
 
         services.AddHostedService<BackgroundServices.ExpiredHoldSweeper>();
         services.AddHostedService<BackgroundServices.OutboxProcessor>();
+
+        services.AddHealthChecks()
+            .AddCheck<Health.PostgresHealthCheck>("postgresql")
+            .AddCheck<Health.RedisHealthCheck>("redis");
 
         return services;
     }

@@ -155,6 +155,26 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHub<BitRoute.Api.Hubs.TelemetryHub>("/hubs/telemetry");
 
+app.MapHealthChecks("/healthz", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        var payload = new
+        {
+            Status = report.Status.ToString(),
+            Checks = report.Entries.Select(e => new
+            {
+                Name = e.Key,
+                Status = e.Value.Status.ToString(),
+                Description = e.Value.Description,
+                Duration = e.Value.Duration.TotalMilliseconds
+            })
+        };
+        await context.Response.WriteAsJsonAsync(payload);
+    }
+});
+
 app.Run();
 
 public partial class Program { }

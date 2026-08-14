@@ -11,5 +11,6 @@
     <Project Path="tests/BitRoute.ArchitectureTests/BitRoute.ArchitectureTests.csproj" />
     <Project Path="tests/BitRoute.Domain.Tests/BitRoute.Domain.Tests.csproj" />
     <Project Path="tests/BitRoute.Infrastructure.Tests/BitRoute.Infrastructure.Tests.csproj" />
+    <Project Path="tests/BitRoute.IntegrationTests/BitRoute.IntegrationTests.csproj" />
   </Folder>
 </Solution>

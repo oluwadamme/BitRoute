@@ -99,3 +99,11 @@ public sealed record ScheduleDto(
     Guid VehicleId,
     TimeOnly DepartureTimeOfDay,
     List<ScheduleLegDto> Legs);
+
+/// <summary>Latest known GPS location for a schedule departure.</summary>
+public sealed record TelemetryLocationDto(
+    Guid ScheduleId,
+    double Latitude,
+    double Longitude,
+    int CurrentLegIndex,
+    DateTimeOffset Timestamp);

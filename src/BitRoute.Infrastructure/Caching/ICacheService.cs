@@ -22,4 +22,6 @@ public interface ICacheService
     Task<IReadOnlyCollection<string>> GetSetMembersAsync(string setKey, CancellationToken cancellationToken = default);
 
     Task RemoveKeysAsync(IEnumerable<string> keys, CancellationToken cancellationToken = default);
+
+    Task SetGeoLocationAsync(string geoKey, string member, double longitude, double latitude, CancellationToken cancellationToken = default);
 }
