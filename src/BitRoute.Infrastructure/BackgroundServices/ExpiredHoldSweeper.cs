@@ -69,6 +69,15 @@ public sealed class ExpiredHoldSweeper : BackgroundService
             }
 
             await db.SaveChangesAsync(cancellationToken);
+
+            var cache = scope.ServiceProvider.GetService<BitRoute.Application.Booking.IAvailabilityCache>();
+            if (cache is not null)
+            {
+                foreach (var group in expiredBookings.GroupBy(b => (b.ScheduleId, b.TravelDate)))
+                {
+                    await cache.InvalidateAsync(group.Key.ScheduleId, group.Key.TravelDate, cancellationToken);
+                }
+            }
         }
     }
 }

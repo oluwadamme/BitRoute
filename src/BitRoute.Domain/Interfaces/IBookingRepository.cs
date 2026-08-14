@@ -5,6 +5,8 @@ namespace BitRoute.Domain.Interfaces;
 public interface IBookingRepository
 {
     Task<SeatBooking?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyCollection<SeatBooking>> GetByPassengerIdAsync(Guid passengerId, CancellationToken cancellationToken = default);
     
     Task<SeatBooking?> GetByIdempotencyKeyAsync(string key, CancellationToken cancellationToken = default);
     

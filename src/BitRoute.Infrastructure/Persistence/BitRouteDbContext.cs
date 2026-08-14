@@ -27,6 +27,7 @@ public sealed class BitRouteDbContext
     public DbSet<Schedule> Schedules => Set<Schedule>();
     public DbSet<ScheduleLeg> ScheduleLegs => Set<ScheduleLeg>();
     public DbSet<SeatBooking> SeatBookings => Set<SeatBooking>();
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

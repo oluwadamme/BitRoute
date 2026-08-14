@@ -3,6 +3,7 @@ using BitRoute.Application.Auth;
 using BitRoute.Domain.ValueObjects;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.JsonWebTokens;
 
 namespace BitRoute.Api.Controllers;
@@ -33,6 +34,7 @@ public sealed class AuthController : ControllerBase
             StatusCodes.Status201Created,
             await _auth.RegisterAsync(request, cancellationToken));
 
+    [EnableRateLimiting("AuthPolicy")]
     [HttpPost("login")]
     public async Task<ActionResult<ApiResponse<AuthResult>>> Login(
         LoginRequest request, CancellationToken cancellationToken)

@@ -68,16 +68,24 @@ public static class DependencyInjection
                 "Connection string 'Redis' is not configured. Set ConnectionStrings__Redis.");
         services.AddSingleton<IConnectionMultiplexer>(
             _ => ConnectionMultiplexer.Connect(redisConnectionString));
+        services.AddSingleton<Caching.ICacheService, Caching.RedisCacheService>();
         services.AddSingleton<IRefreshTokenCrypto, RefreshTokenCrypto>();
         services.AddSingleton<IRefreshTokenStore, RedisRefreshTokenStore>();
+
+        services.AddOptions<Payments.PaystackOptions>()
+            .Bind(configuration.GetSection(Payments.PaystackOptions.SectionName));
+
+        services.AddHttpClient<IPaystackService, Payments.PaystackService>();
 
         services.AddScoped<IUnitOfWork, Persistence.Repositories.UnitOfWork>();
         services.AddScoped<IRouteRepository, Persistence.Repositories.RouteRepository>();
         services.AddScoped<IVehicleRepository, Persistence.Repositories.VehicleRepository>();
         services.AddScoped<IScheduleRepository, Persistence.Repositories.ScheduleRepository>();
         services.AddScoped<IBookingRepository, Persistence.Repositories.BookingRepository>();
+        services.AddSingleton<BitRoute.Application.Booking.IAvailabilityCache, Caching.RedisAvailabilityCache>();
 
         services.AddHostedService<BackgroundServices.ExpiredHoldSweeper>();
+        services.AddHostedService<BackgroundServices.OutboxProcessor>();
 
         return services;
     }

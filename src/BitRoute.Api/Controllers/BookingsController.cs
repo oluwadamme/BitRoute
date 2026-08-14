@@ -3,6 +3,7 @@ using BitRoute.Application;
 using BitRoute.Application.Booking;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.JsonWebTokens;
 
 namespace BitRoute.Api.Controllers;
@@ -20,6 +21,7 @@ public sealed class BookingsController : ControllerBase
 
     /// <summary>Creates a temporary 10-minute seat hold (authenticated passenger).</summary>
     [Authorize]
+    [EnableRateLimiting("HoldPolicy")]
     [HttpPost("hold")]
     public async Task<ActionResult<ApiResponse<BookingDto>>> HoldSeat(
         HoldSeatRequest request, CancellationToken cancellationToken)
@@ -39,6 +41,18 @@ public sealed class BookingsController : ControllerBase
         return Ok(response);
     }
 
+    /// <summary>Initializes a Paystack transaction for a held seat booking (authenticated passenger).</summary>
+    [Authorize]
+    [HttpPost("{bookingId:guid}/pay")]
+    public async Task<ActionResult<ApiResponse<BitRoute.Domain.Interfaces.PaystackInitializeResponse>>> InitializePaystackPayment(
+        Guid bookingId,
+        [FromQuery] string callbackUrl = "http://localhost:3000/payment/callback",
+        CancellationToken cancellationToken = default)
+    {
+        var response = await _booking.InitializePaymentAsync(bookingId, callbackUrl, cancellationToken);
+        return Ok(response);
+    }
+
     /// <summary>Retrieves details of a specific seat booking (ownership-aware).</summary>
     [Authorize]
     [HttpGet("{bookingId:guid}")]
@@ -48,6 +62,29 @@ public sealed class BookingsController : ControllerBase
         var userId = GetUserId();
         var userRole = GetUserRole();
         var response = await _booking.GetBookingAsync(bookingId, userId, userRole, cancellationToken);
+        return Ok(response);
+    }
+
+    /// <summary>Retrieves all seat bookings belonging to the authenticated passenger.</summary>
+    [Authorize]
+    [HttpGet("me")]
+    public async Task<ActionResult<ApiResponse<IReadOnlyCollection<BookingDto>>>> GetMyBookings(
+        CancellationToken cancellationToken)
+    {
+        var passengerId = GetUserId();
+        var response = await _booking.GetMyBookingsAsync(passengerId, cancellationToken);
+        return Ok(response);
+    }
+
+    /// <summary>Cancels an existing booking and releases its seat inventory (ownership-aware).</summary>
+    [Authorize]
+    [HttpDelete("{bookingId:guid}")]
+    public async Task<ActionResult<ApiResponse<object>>> CancelBooking(
+        Guid bookingId, CancellationToken cancellationToken)
+    {
+        var userId = GetUserId();
+        var userRole = GetUserRole();
+        var response = await _booking.CancelBookingAsync(bookingId, userId, userRole, cancellationToken);
         return Ok(response);
     }
 

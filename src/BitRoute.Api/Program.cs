@@ -1,4 +1,5 @@
 using System.Text;
+using System.Threading.RateLimiting;
 using BitRoute.Api;
 using BitRoute.Api.Middleware;
 using BitRoute.Api.OpenApi;
@@ -8,6 +9,7 @@ using BitRoute.Infrastructure;
 using BitRoute.Infrastructure.Identity;
 using BitRoute.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
@@ -28,7 +30,36 @@ builder.Services.AddInfrastructure(builder.Configuration);
 // Application: auth service, validators, options.
 builder.Services.AddApplication(builder.Configuration);
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("FrontendCors", policy =>
+    {
+        policy.WithOrigins("http://localhost:3000", "http://localhost:80")
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
+    });
+});
+
 builder.Services.AddControllers();
+builder.Services.AddSignalR();
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddFixedWindowLimiter("HoldPolicy", opt =>
+    {
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.PermitLimit = 30;
+        opt.QueueLimit = 0;
+    });
+    options.AddFixedWindowLimiter("AuthPolicy", opt =>
+    {
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.PermitLimit = 10;
+        opt.QueueLimit = 0;
+    });
+});
 
 // Bearer validation must mirror JwtTokenGenerator: same key, issuer, audience, and
 // the compact claim names ("sub", "role") the tokens actually carry.
@@ -116,10 +147,13 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.UseCors("FrontendCors");
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<BitRoute.Api.Hubs.TelemetryHub>("/hubs/telemetry");
 
 app.Run();
 

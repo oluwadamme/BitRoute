@@ -17,6 +17,8 @@ public class BookingServiceTests
     private readonly Mock<IVehicleRepository> _vehicleRepositoryMock = new();
     private readonly Mock<IScheduleRepository> _scheduleRepositoryMock = new();
     private readonly Mock<IBookingRepository> _bookingRepositoryMock = new();
+    private readonly Mock<IPaystackService> _paystackServiceMock = new();
+    private readonly Mock<IAvailabilityCache> _cacheMock = new();
     private readonly Mock<IRequestValidator> _validatorMock = new();
     private readonly Mock<TimeProvider> _clockMock = new();
     private readonly Mock<ILogger<BookingService>> _loggerMock = new();
@@ -49,6 +51,8 @@ public class BookingServiceTests
             _vehicleRepositoryMock.Object,
             _scheduleRepositoryMock.Object,
             _bookingRepositoryMock.Object,
+            _paystackServiceMock.Object,
+            _cacheMock.Object,
             _validatorMock.Object,
             _clockMock.Object,
             _loggerMock.Object);

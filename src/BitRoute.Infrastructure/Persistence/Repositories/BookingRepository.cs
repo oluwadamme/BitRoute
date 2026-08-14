@@ -20,6 +20,14 @@ public sealed class BookingRepository : IBookingRepository
             .FirstOrDefaultAsync(b => b.Id == id, cancellationToken);
     }
 
+    public async Task<IReadOnlyCollection<SeatBooking>> GetByPassengerIdAsync(Guid passengerId, CancellationToken cancellationToken = default)
+    {
+        return await _db.SeatBookings
+            .Where(b => b.PassengerId == passengerId)
+            .OrderByDescending(b => b.TravelDate)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<SeatBooking?> GetByIdempotencyKeyAsync(string key, CancellationToken cancellationToken = default)
     {
         return await _db.SeatBookings

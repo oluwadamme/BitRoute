@@ -14,6 +14,8 @@ public sealed class BookingService : IBookingService
     private readonly IVehicleRepository _vehicleRepository;
     private readonly IScheduleRepository _scheduleRepository;
     private readonly IBookingRepository _bookingRepository;
+    private readonly IPaystackService _paystackService;
+    private readonly IAvailabilityCache _cache;
     private readonly IRequestValidator _validator;
     private readonly TimeProvider _clock;
     private readonly ILogger<BookingService> _logger;
@@ -24,6 +26,8 @@ public sealed class BookingService : IBookingService
         IVehicleRepository vehicleRepository,
         IScheduleRepository scheduleRepository,
         IBookingRepository bookingRepository,
+        IPaystackService paystackService,
+        IAvailabilityCache cache,
         IRequestValidator validator,
         TimeProvider clock,
         ILogger<BookingService> logger)
@@ -33,6 +37,8 @@ public sealed class BookingService : IBookingService
         _vehicleRepository = vehicleRepository;
         _scheduleRepository = scheduleRepository;
         _bookingRepository = bookingRepository;
+        _paystackService = paystackService;
+        _cache = cache;
         _validator = validator;
         _clock = clock;
         _logger = logger;
@@ -58,6 +64,15 @@ public sealed class BookingService : IBookingService
         return ApiResponse.Success(dto, "Route retrieved successfully.");
     }
 
+    public async Task<ApiResponse<IReadOnlyCollection<RouteDto>>> GetAllRoutesAsync(CancellationToken cancellationToken = default)
+    {
+        var routes = await _routeRepository.GetAllAsync(cancellationToken);
+        var dtos = routes
+            .Select(r => new RouteDto(r.Id, r.Name, r.Stops.OrderBy(s => s.Index).Select(s => s.Name).ToList()))
+            .ToList();
+        return ApiResponse.Success<IReadOnlyCollection<RouteDto>>(dtos, "Routes retrieved successfully.");
+    }
+
     public async Task<ApiResponse<Guid>> CreateVehicleAsync(CreateVehicleRequest request, CancellationToken cancellationToken = default)
     {
         await _validator.ValidateAndThrowAsync(request, cancellationToken);
@@ -76,6 +91,15 @@ public sealed class BookingService : IBookingService
 
         var dto = new VehicleDto(vehicle.Id, vehicle.Name, vehicle.Seats.Select(s => s.Number).ToList());
         return ApiResponse.Success(dto, "Vehicle retrieved successfully.");
+    }
+
+    public async Task<ApiResponse<IReadOnlyCollection<VehicleDto>>> GetAllVehiclesAsync(CancellationToken cancellationToken = default)
+    {
+        var vehicles = await _vehicleRepository.GetAllAsync(cancellationToken);
+        var dtos = vehicles
+            .Select(v => new VehicleDto(v.Id, v.Name, v.Seats.Select(s => s.Number).ToList()))
+            .ToList();
+        return ApiResponse.Success<IReadOnlyCollection<VehicleDto>>(dtos, "Vehicles retrieved successfully.");
     }
 
     public async Task<ApiResponse<Guid>> CreateScheduleAsync(CreateScheduleRequest request, CancellationToken cancellationToken = default)
@@ -109,6 +133,20 @@ public sealed class BookingService : IBookingService
         return ApiResponse.Success(dto, "Schedule retrieved successfully.");
     }
 
+    public async Task<ApiResponse<IReadOnlyCollection<ScheduleDto>>> GetAllSchedulesAsync(CancellationToken cancellationToken = default)
+    {
+        var schedules = await _scheduleRepository.GetAllAsync(cancellationToken);
+        var dtos = schedules
+            .Select(s => new ScheduleDto(
+                s.Id,
+                s.RouteId,
+                s.VehicleId,
+                s.DepartureTimeOfDay,
+                s.ScheduleLegs.Select(l => new ScheduleLegDto(l.Id, l.StartStopIndex, l.EndStopIndex, l.Fare)).ToList()))
+            .ToList();
+        return ApiResponse.Success<IReadOnlyCollection<ScheduleDto>>(dtos, "Schedules retrieved successfully.");
+    }
+
     public async Task<ApiResponse<ScheduleAvailabilityResponse>> GetScheduleAvailabilityAsync(
         Guid scheduleId,
         DateOnly travelDate,
@@ -120,6 +158,12 @@ public sealed class BookingService : IBookingService
             throw new BookingDomainException("Boarding index cannot be negative.");
         if (alightingIndex <= boardingIndex)
             throw new BookingDomainException("Alighting index must be greater than boarding index.");
+
+        var cached = await _cache.GetAsync(scheduleId, travelDate, boardingIndex, alightingIndex, cancellationToken);
+        if (cached is not null)
+        {
+            return ApiResponse.Success(cached, "Availability retrieved successfully");
+        }
 
         var schedule = await _scheduleRepository.GetByIdAsync(scheduleId, cancellationToken);
         if (schedule is null) throw new ScheduleNotFoundException($"Schedule '{scheduleId}' not found.");
@@ -139,6 +183,8 @@ public sealed class BookingService : IBookingService
 
         var price = schedule.GetPrice(boardingIndex, alightingIndex);
         var response = new ScheduleAvailabilityResponse(scheduleId, travelDate, price, seatAvailabilities);
+
+        await _cache.SetAsync(scheduleId, travelDate, boardingIndex, alightingIndex, response, cancellationToken);
 
         return ApiResponse.Success(response, "Availability retrieved successfully.");
     }
@@ -203,6 +249,7 @@ public sealed class BookingService : IBookingService
             return MapToDto(booking);
         }, cancellationToken);
 
+        await _cache.InvalidateAsync(request.ScheduleId, request.TravelDate, cancellationToken);
         return ApiResponse.Success(bookingDto, "Seat hold created for 10 minutes.");
     }
 
@@ -214,8 +261,40 @@ public sealed class BookingService : IBookingService
         booking.Confirm(_clock.GetUtcNow());
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
+        await _cache.InvalidateAsync(booking.ScheduleId, booking.TravelDate, cancellationToken);
+
         _logger.LogInformation("Booking '{BookingId}' confirmed successfully.", bookingId);
         return ApiResponse.SuccessMessage("Booking confirmed successfully.");
+    }
+
+    public async Task<ApiResponse<PaystackInitializeResponse>> InitializePaymentAsync(
+        Guid bookingId,
+        string callbackUrl,
+        CancellationToken cancellationToken = default)
+    {
+        var booking = await _bookingRepository.GetByIdAsync(bookingId, cancellationToken);
+        if (booking is null) throw new BookingDomainException($"Booking '{bookingId}' not found.");
+
+        if (booking.Status != SeatBookingStatus.Held)
+        {
+            throw new BookingDomainException($"Booking '{bookingId}' is not in HELD status (current: {booking.Status}).");
+        }
+
+        if (booking.HoldExpiry.HasValue && booking.HoldExpiry.Value < _clock.GetUtcNow())
+        {
+            booking.Expire();
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            throw new HoldExpiredException("Cannot initialize payment for an expired seat hold.");
+        }
+
+        var paystackResponse = await _paystackService.InitializeTransactionAsync(
+            "passenger@bitroute.com",
+            booking.Price,
+            booking.Id.ToString(),
+            callbackUrl,
+            cancellationToken);
+
+        return ApiResponse.Success(paystackResponse, "Paystack transaction initialized.");
     }
 
     public async Task<ApiResponse<BookingDto>> GetBookingAsync(Guid bookingId, Guid userId, string userRole, CancellationToken cancellationToken = default)
@@ -230,6 +309,32 @@ public sealed class BookingService : IBookingService
         }
 
         return ApiResponse.Success(MapToDto(booking), "Booking retrieved successfully.");
+    }
+
+    public async Task<ApiResponse<IReadOnlyCollection<BookingDto>>> GetMyBookingsAsync(Guid passengerId, CancellationToken cancellationToken = default)
+    {
+        var bookings = await _bookingRepository.GetByPassengerIdAsync(passengerId, cancellationToken);
+        var dtos = bookings.Select(MapToDto).ToList();
+        return ApiResponse.Success<IReadOnlyCollection<BookingDto>>(dtos, "My bookings retrieved successfully.");
+    }
+
+    public async Task<ApiResponse<object>> CancelBookingAsync(Guid bookingId, Guid userId, string userRole, CancellationToken cancellationToken = default)
+    {
+        var booking = await _bookingRepository.GetByIdAsync(bookingId, cancellationToken);
+        if (booking is null) throw new BookingDomainException($"Booking '{bookingId}' not found.");
+
+        if (userRole == nameof(UserRole.Passenger) && booking.PassengerId != userId)
+        {
+            throw new BookingDomainException("You do not have permission to cancel this booking.");
+        }
+
+        booking.Cancel();
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        await _cache.InvalidateAsync(booking.ScheduleId, booking.TravelDate, cancellationToken);
+
+        _logger.LogInformation("Booking '{BookingId}' cancelled successfully by user '{UserId}'.", bookingId, userId);
+        return ApiResponse.SuccessMessage("Booking cancelled successfully.");
     }
 
     private static BookingDto MapToDto(SeatBooking b)
