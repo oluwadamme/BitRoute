@@ -52,6 +52,17 @@ services:
       redis:
         condition: service_healthy
 
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: bitroute-web
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+
 volumes:
   postgres-data:
   redis-data:

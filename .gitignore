@@ -1,4 +1,4 @@
-# Build output
+# .NET Build Output
 [Bb]in/
 [Oo]bj/
 [Dd]ebug/
@@ -24,7 +24,7 @@ project.fragment.lock.json
 *.suo
 *.userprefs
 
-# Test results and coverage
+# Test Results & Code Coverage
 [Tt]est[Rr]esult*/
 coverage*.json
 coverage*.xml
@@ -33,34 +33,49 @@ coverage*.info
 *.coveragexml
 TestResults/
 
-# Rider / ReSharper
+# Node.js & Vite Frontend
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+dist-ssr/
+*.local
+.vite/
+.npm/
+package-lock.json
+
+# IDE & Editors (Rider, VS Code, Visual Studio)
 .idea/
+.vs/
 *.sln.iml
 _ReSharper*/
 *.[Rr]e[Ss]harper
-
-# Visual Studio
-.vs/
 *.vsidx
-*.suo
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
 
-# Secrets and local configuration
+# Environment Variables & Secrets
 appsettings.*.local.json
 *.env
 .env
 .env.*
 secrets.json
-# ...but keep the committed template
 !.env.example
 
-# Logs
+# Logs & Temporary Files
 *.log
 logs/
+tmp/
+temp/
 
-# macOS
+# OS Specific
 .DS_Store
-
-# Windows
-Thumbs.db
+.DS_Store?
+._*
+.Trashes
 ehthumbs.db
+Thumbs.db
 desktop.ini
