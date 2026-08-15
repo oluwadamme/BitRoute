@@ -44,10 +44,10 @@ export const Card: React.FC<CardProps> = ({
         <header className="flex items-start justify-between gap-4 px-5 py-4 border-b border-rule">
           <div className="min-w-0">
             {title && (
-              <h2 className="board text-xl text-ink font-bold">{title}</h2>
+              <h2 className="board text-xl text-content font-bold">{title}</h2>
             )}
             {subtitle && (
-              <p className="mt-1 text-xs text-ink-muted leading-snug">{subtitle}</p>
+              <p className="mt-1 text-xs text-content-muted leading-snug">{subtitle}</p>
             )}
           </div>
           {action && <div className="shrink-0 flex items-center gap-2">{action}</div>}

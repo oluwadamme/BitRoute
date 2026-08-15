@@ -4,6 +4,7 @@ import { BookingDto } from '../types';
 import { Modal } from './ui/Modal';
 import { Button } from './ui/Button';
 import { Badge } from './ui/Badge';
+import { NotificationBanner } from './ui/NotificationBanner';
 import { describeCountdown, formatCountdown, formatFare, formatTravelDate, shortRef } from '../lib/format';
 
 interface CheckoutModalProps {
@@ -11,6 +12,8 @@ interface CheckoutModalProps {
   onClose: () => void;
   onPayWithPaystack: (bookingId: string) => void;
   isProcessing: boolean;
+  paymentError?: string | null;
+  onClearPaymentError?: () => void;
 }
 
 /** Seconds remaining until `holdExpiry`, or null when there is no hold to count down. */
@@ -27,11 +30,21 @@ const URGENT_ANNOUNCE_INTERVAL = 15;
 
 type HoldState = 'active' | 'expired' | 'none';
 
+
+const describeJourneyLength = (boardingIndex: number, alightingIndex: number): string => {
+  // A valid booking always spans at least one stop; clamping means malformed
+  // data can never render "0 stops".
+  const stops = Math.max(1, alightingIndex - boardingIndex);
+  return `${stops} stop${stops === 1 ? '' : 's'}`;
+};
+
 export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   booking,
   onClose,
   onPayWithPaystack,
   isProcessing,
+  paymentError,
+  onClearPaymentError,
 }) => {
   // Lazy initialiser: a hold created 8 minutes ago must show ~2 minutes left on
   // the very first paint, not a hardcoded 10:00 that only self-corrects a
@@ -94,13 +107,20 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       >
         {holdState === 'expired' ? 'Hold expired' : holdState === 'active' ? 'Seat held' : 'No countdown'}
       </Badge>
-      <h2 className="board text-xl text-ink">{titleText}</h2>
+      <h2 className="board text-xl text-content">{titleText}</h2>
     </div>
   );
 
   return (
     <Modal isOpen={true} onClose={onClose} title={modalTitle} titleText={titleText} maxWidth="lg">
       <div className="space-y-5">
+        {paymentError && (
+          <NotificationBanner
+            notification={{ type: 'error', message: paymentError }}
+            onDismiss={() => onClearPaymentError?.()}
+          />
+        )}
+
         {/*
           Always mounted so the browser has somewhere to announce into before
           the first message arrives. Spoken form only, kept out of the visual
@@ -118,7 +138,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               <div className="min-w-0">
                 <p className="stencil text-ochre-deep">Pay before this seat is released</p>
                 {expiryClockTime && (
-                  <p className="text-xs text-ink-muted mt-0.5">Your hold ends at {expiryClockTime}</p>
+                  <p className="text-xs text-content-muted mt-0.5">Your hold ends at {expiryClockTime}</p>
                 )}
               </div>
             </div>
@@ -133,7 +153,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             <AlertTriangle aria-hidden="true" className="w-5 h-5 text-signal-deep shrink-0" />
             <div>
               <p className="stencil text-signal-deep">Your hold has run out</p>
-              <p className="text-xs text-ink-muted mt-0.5">
+              <p className="text-xs text-content-muted mt-0.5">
                 That seat is back on sale. Close this window and hold it again if it&rsquo;s still
                 free.
               </p>
@@ -142,9 +162,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         )}
 
         {holdState === 'none' && (
-          <div className="flex items-center gap-3 rounded-ticket border border-rule-strong bg-paper-sunk p-4">
-            <Clock aria-hidden="true" className="w-5 h-5 text-ink-faint shrink-0" />
-            <p className="text-xs text-ink-muted">
+          <div className="flex items-center gap-3 rounded-ticket border border-rule-strong bg-surface-sunk p-4">
+            <Clock aria-hidden="true" className="w-5 h-5 text-content-faint shrink-0" />
+            <p className="text-xs text-content-muted">
               There&rsquo;s no countdown on this booking. Pay now to be sure of your seat.
             </p>
           </div>
@@ -154,20 +174,20 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           The boarding-pass tear: journey details above, fare below, split by
           a genuine perforation rather than a plain divider.
         */}
-        <div className="rounded-ticket border border-rule bg-paper-raised">
+        <div className="rounded-ticket border border-rule bg-surface-raised">
           <div className="px-4 py-4 space-y-2 text-sm">
             <div className="flex justify-between gap-4">
-              <span className="stencil text-ink-faint">Booking ref</span>
-              <span className="figures text-ink">{shortRef(booking.id)}</span>
+              <span className="stencil text-content-faint">Booking ref</span>
+              <span className="figures text-content">{shortRef(booking.id)}</span>
             </div>
             <div className="flex justify-between gap-4">
-              <span className="stencil text-ink-faint">Travel date</span>
-              <span className="text-ink">{formatTravelDate(booking.travelDate)}</span>
+              <span className="stencil text-content-faint">Travel date</span>
+              <span className="text-content">{formatTravelDate(booking.travelDate)}</span>
             </div>
             <div className="flex justify-between gap-4">
-              <span className="stencil text-ink-faint">Journey</span>
-              <span className="figures text-ink">
-                Stop {booking.boardingIndex} &rarr; Stop {booking.alightingIndex}
+              <span className="stencil text-content-faint">Journey</span>
+              <span className="text-content">
+                {describeJourneyLength(booking.boardingIndex, booking.alightingIndex)} along the route
               </span>
             </div>
           </div>
@@ -175,12 +195,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           <div className="perforation" aria-hidden="true" />
 
           <div className="px-4 py-4 flex items-center justify-between">
-            <span className="board text-sm text-ink-muted">Total fare</span>
+            <span className="board text-sm text-content-muted">Total fare</span>
             <span className="board text-2xl text-signal-deep">{formatFare(booking.price)}</span>
           </div>
         </div>
 
-        <div className="flex items-center justify-center gap-2 text-xs text-ink-muted">
+        <div className="flex items-center justify-center gap-2 text-xs text-content-muted">
           <ShieldCheck aria-hidden="true" className="w-4 h-4 text-stamp" />
           <span>Payment secured by Paystack</span>
         </div>

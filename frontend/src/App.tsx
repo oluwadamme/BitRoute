@@ -9,7 +9,7 @@ import { MyBookingsTab } from './components/MyBookingsTab';
 import { OperatorTab } from './components/OperatorTab';
 import { Card } from './components/ui/Card';
 import { Button } from './components/ui/Button';
-import { Badge } from './components/ui/Badge';
+import { IconButton } from './components/ui/IconButton';
 import { NotificationBanner, Notification } from './components/ui/NotificationBanner';
 import { api, isAbortError, toErrorMessage } from './services/api';
 import {
@@ -18,11 +18,33 @@ import {
   ScheduleDto,
   SeatAvailabilityDto,
   UserProfile,
+  UserRole,
+  VehicleLayoutDto,
 } from './types';
-import { formatDepartureTime, formatFare, formatSegment, todayIso } from './lib/format';
+import { formatDepartureTime, formatFare, todayIso } from './lib/format';
 import { RefreshCw } from 'lucide-react';
 
 type Tab = 'search' | 'my-bookings' | 'operator';
+
+const getTabFromPath = (pathname: string): Tab => {
+  const cleanPath = pathname.toLowerCase().replace(/\/+$/, '');
+  if (cleanPath === '/bookings') return 'my-bookings';
+  if (cleanPath === '/operator') return 'operator';
+  return 'search';
+};
+
+const getAuthModeFromPath = (pathname: string): 'login' | 'register' | null => {
+  const cleanPath = pathname.toLowerCase().replace(/\/+$/, '');
+  if (cleanPath === '/login') return 'login';
+  if (cleanPath === '/register') return 'register';
+  return null;
+};
+
+const getPathForTab = (tab: Tab): string => {
+  if (tab === 'my-bookings') return '/bookings';
+  if (tab === 'operator') return '/operator';
+  return '/search';
+};
 
 /** Identifies one availability query. Used to key the idempotency token below. */
 const selectionKey = (
@@ -34,9 +56,106 @@ const selectionKey = (
 ) => `${scheduleId}|${travelDate}|${seatId}|${boardingIndex}|${alightingIndex}`;
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<Tab>('search');
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const initialPath = window.location.pathname;
+  const initialAuthMode = getAuthModeFromPath(initialPath);
+
+  const [activeTab, setActiveTabState] = useState<Tab>(() => getTabFromPath(initialPath));
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(initialAuthMode !== null);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>(initialAuthMode || 'login');
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
+
+  const navigateTab = useCallback((tab: Tab) => {
+    setActiveTabState(tab);
+    const targetPath = getPathForTab(tab);
+    if (window.location.pathname !== targetPath && window.location.pathname !== `/${authMode}`) {
+      window.history.pushState(null, '', targetPath);
+    }
+  }, [authMode]);
+
+  const openAuthModal = useCallback((mode: 'login' | 'register' = 'login') => {
+    setAuthMode(mode);
+    setIsAuthModalOpen(true);
+    const targetPath = `/${mode}`;
+    if (window.location.pathname !== targetPath) {
+      window.history.pushState(null, '', targetPath);
+    }
+  }, []);
+
+  const closeAuthModal = useCallback(() => {
+    if (!currentUser) {
+      openAuthModal('login');
+      return;
+    }
+    setIsAuthModalOpen(false);
+    const targetPath = getPathForTab(activeTab);
+    if (window.location.pathname !== targetPath) {
+      window.history.pushState(null, '', targetPath);
+    }
+  }, [activeTab, currentUser, openAuthModal]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname;
+      const mode = getAuthModeFromPath(path);
+      if (mode) {
+        setAuthMode(mode);
+        setIsAuthModalOpen(true);
+      } else {
+        setIsAuthModalOpen(false);
+        const tab = getTabFromPath(path);
+        setActiveTabState(tab);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const reference = urlParams.get('reference');
+    const status = urlParams.get('status');
+
+    if (reference && (status === 'success' || window.location.pathname === '/payment/callback')) {
+      const handlePaymentReturn = async () => {
+        try {
+          await api.confirmBooking(reference);
+          setNotification({
+            message: 'Payment confirmed! Your seat booking is finalized.',
+            type: 'success',
+          });
+          window.history.replaceState(null, '', '/bookings');
+          setActiveTabState('my-bookings');
+          setActiveBooking(null);
+        } catch (err) {
+          setNotification({
+            message: toErrorMessage(err, 'Failed to confirm payment.'),
+            type: 'error',
+          });
+        }
+      };
+
+      void handlePaymentReturn();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthChecking && currentUser === null) {
+      openAuthModal(authMode || 'login');
+    }
+  }, [isAuthChecking, currentUser, authMode, openAuthModal]);
+
+  const isOperatorUser = Boolean(
+    currentUser?.roles?.some((r) => r === UserRole.Admin || r === UserRole.Operator)
+  );
+
+  useEffect(() => {
+    if (activeTab === 'operator' && currentUser !== null && !isOperatorUser) {
+      navigateTab('search');
+    }
+  }, [activeTab, currentUser, isOperatorUser, navigateTab]);
 
   const [routes, setRoutes] = useState<RouteDto[]>([]);
   const [selectedRoute, setSelectedRoute] = useState<RouteDto | null>(null);
@@ -53,6 +172,13 @@ export const App: React.FC = () => {
   const [alightingIndex, setAlightingIndex] = useState(1);
 
   const [seats, setSeats] = useState<SeatAvailabilityDto[]>([]);
+
+  /**
+   * The vehicle's cabin shape, reported alongside availability. Null until a
+   * departure has been quoted, and cleared whenever the seats are, so the plan
+   * can never be drawn against a shape from a different vehicle.
+   */
+  const [seatLayout, setSeatLayout] = useState<VehicleLayoutDto | null>(null);
   const [selectedSeatId, setSelectedSeatId] = useState<string | null>(null);
 
   /**
@@ -110,6 +236,8 @@ export const App: React.FC = () => {
       } catch {
         // An unauthenticated visitor is an ordinary state, not an error.
         if (!controller.signal.aborted) setCurrentUser(null);
+      } finally {
+        if (!controller.signal.aborted) setIsAuthChecking(false);
       }
 
       try {
@@ -199,6 +327,7 @@ export const App: React.FC = () => {
         if (controller.signal.aborted) return;
 
         setSeats(res.seats);
+        setSeatLayout(res.layout ?? null);
         setEstimatedPrice(res.price);
 
         /*
@@ -226,6 +355,7 @@ export const App: React.FC = () => {
       } catch (err) {
         if (controller.signal.aborted || isAbortError(err)) return;
         setSeats([]);
+        setSeatLayout(null);
         setEstimatedPrice(null);
         setNotification({
           message: toErrorMessage(
@@ -272,6 +402,7 @@ export const App: React.FC = () => {
       );
 
       const booking = await api.holdSeat({
+        passengerId: currentUser.id,
         scheduleId: selectedSchedule.id,
         travelDate,
         seatId: selectedSeatId,
@@ -309,36 +440,18 @@ export const App: React.FC = () => {
   ]);
 
   const handlePayWithPaystack = useCallback(async (bookingId: string) => {
+    setPaymentError(null);
     setIsProcessingPayment(true);
 
-    /*
-     * The tab is opened synchronously, while the click still counts as user
-     * activation. Calling window.open after awaiting the network, as the
-     * previous build did, loses that activation and Safari and Firefox block
-     * the popup outright.
-     */
-    const checkoutWindow = window.open('about:blank', '_blank', 'noopener,noreferrer');
-
     try {
-      const paystackRes = await api.initializePaystackPayment(bookingId);
-
-      if (checkoutWindow && !checkoutWindow.closed) {
-        checkoutWindow.location.href = paystackRes.authorizationUrl;
-      } else {
-        // Popup blocked or dismissed: fall back to the current tab rather than
-        // stranding the passenger on a checkout that silently never opened.
-        window.location.assign(paystackRes.authorizationUrl);
-      }
+      const paystackRes = await api.initializePaystackPayment(bookingId, currentUser?.email ?? '');
+      window.location.href = paystackRes.authorizationUrl;
     } catch (err) {
-      checkoutWindow?.close();
-      setNotification({
-        message: toErrorMessage(err, "We couldn't open Paystack to take your payment. Try again."),
-        type: 'error',
-      });
+      setPaymentError(toErrorMessage(err, "We couldn't open Paystack to take your payment. Try again."));
     } finally {
       setIsProcessingPayment(false);
     }
-  }, []);
+  }, [currentUser?.email]);
 
   const selectedSeat = seats.find((seat) => seat.seatId === selectedSeatId) ?? null;
   const stops = selectedRoute?.stops ?? [];
@@ -352,9 +465,9 @@ export const App: React.FC = () => {
       <Header
         activeHoldExpiry={activeBooking?.holdExpiry ?? null}
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={navigateTab}
         currentUser={currentUser}
-        onOpenAuth={() => setIsAuthModalOpen(true)}
+        onOpenAuth={() => openAuthModal('login')}
       />
 
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 md:px-6 py-6 space-y-5">
@@ -387,6 +500,7 @@ export const App: React.FC = () => {
 
               <SeatMap
                 seats={seats}
+                layout={seatLayout}
                 selectedSeatId={selectedSeatId}
                 onSelectSeat={setSelectedSeatId}
                 isLoading={isLoadingAvailability}
@@ -399,34 +513,33 @@ export const App: React.FC = () => {
                 emphasis
                 title="Your journey"
                 action={
-                  <button
-                    type="button"
+                  <IconButton
+                    label="Check seat availability again"
                     onClick={handleRefreshAvailability}
-                    aria-label="Check seat availability again"
-                    className="p-2 rounded-ticket text-ink-muted hover:text-ink hover:bg-paper-sunk transition-colors"
-                  >
-                    <RefreshCw
-                      className={`w-4 h-4 ${isLoadingAvailability ? 'animate-spin' : ''}`}
-                      aria-hidden="true"
-                    />
-                  </button>
+                    disabled={isLoadingAvailability}
+                    icon={
+                      <RefreshCw
+                        className={`w-4 h-4 ${isLoadingAvailability ? 'animate-spin' : ''}`}
+                      />
+                    }
+                  />
                 }
               >
                 <dl className="space-y-3 text-sm">
                   <div className="flex items-baseline justify-between gap-3">
-                    <dt className="stencil text-ink-muted">Stops</dt>
-                    <dd className="text-right font-semibold text-ink">
-                      {journeyLabel ?? <span className="text-ink-muted">Not chosen yet</span>}
+                    <dt className="stencil text-content-muted">Stops</dt>
+                    <dd className="text-right font-semibold text-content">
+                      {journeyLabel ?? <span className="text-content-muted">Not chosen yet</span>}
                     </dd>
                   </div>
 
                   <div className="flex items-baseline justify-between gap-3">
-                    <dt className="stencil text-ink-muted">Departs</dt>
-                    <dd className="figures text-ink">
+                    <dt className="stencil text-content-muted">Departs</dt>
+                    <dd className="figures text-content">
                       {selectedSchedule ? (
                         formatDepartureTime(selectedSchedule.departureTimeOfDay)
                       ) : (
-                        <span className="text-ink-muted">
+                          <span className="text-content-muted">
                           <span aria-hidden="true">&mdash;</span>
                           <span className="sr-only">Departure time not chosen yet</span>
                         </span>
@@ -435,31 +548,23 @@ export const App: React.FC = () => {
                   </div>
 
                   <div className="flex items-baseline justify-between gap-3">
-                    <dt className="stencil text-ink-muted">Seat</dt>
-                    <dd className="figures font-semibold text-ink">
+                    <dt className="stencil text-content-muted">Seat</dt>
+                    <dd className="figures font-semibold text-content">
                       {selectedSeat?.seatNumber ?? (
-                        <span className="text-ink-muted font-sans">Not chosen yet</span>
+                        <span className="text-content-muted font-sans">Not chosen yet</span>
                       )}
                     </dd>
                   </div>
 
-                  <div className="flex items-baseline justify-between gap-3">
-                    <dt className="stencil text-ink-muted">Segment</dt>
-                    <dd>
-                      <Badge variant="neutral">
-                        {formatSegment(boardingIndex, alightingIndex)}
-                      </Badge>
-                    </dd>
-                  </div>
                 </dl>
 
                 <div className="perforation my-5" />
 
                 <div className="flex items-baseline justify-between gap-3">
-                  <span className="board text-lg font-bold text-ink">Fare</span>
+                  <span className="board text-lg font-bold text-content">Fare</span>
                   <span className="board text-3xl font-bold text-signal-deep">
                     {estimatedPrice === null ? (
-                      <span className="text-ink-muted text-xl">
+                      <span className="text-content-muted text-xl">
                         <span aria-hidden="true">&mdash;</span>
                         <span className="sr-only">Fare not available yet</span>
                       </span>
@@ -480,7 +585,7 @@ export const App: React.FC = () => {
                   Hold this seat
                 </Button>
 
-                <p className="mt-2 text-xs text-ink-muted text-center leading-snug">
+                <p className="mt-2 text-xs text-content-muted text-center leading-snug">
                   We&rsquo;ll hold your seat while you pay. If the hold runs out first, the seat
                   goes back on sale.
                 </p>
@@ -495,13 +600,13 @@ export const App: React.FC = () => {
 
         {activeTab === 'my-bookings' && (
           <div id="panel-my-bookings" role="tabpanel" aria-labelledby="tab-my-bookings" tabIndex={-1} className="outline-none">
-            <MyBookingsTab onPayBooking={setActiveBooking} />
+            <MyBookingsTab currentUser={currentUser} onPayBooking={setActiveBooking} />
           </div>
         )}
 
         {activeTab === 'operator' && (
           <div id="panel-operator" role="tabpanel" aria-labelledby="tab-operator" tabIndex={-1} className="outline-none">
-            <OperatorTab />
+            <OperatorTab currentUser={currentUser} />
           </div>
         )}
       </main>
@@ -509,16 +614,22 @@ export const App: React.FC = () => {
       {activeBooking && (
         <CheckoutModal
           booking={activeBooking}
-          onClose={() => setActiveBooking(null)}
+          onClose={() => {
+            setActiveBooking(null);
+            setPaymentError(null);
+          }}
           onPayWithPaystack={handlePayWithPaystack}
           isProcessing={isProcessingPayment}
+          paymentError={paymentError}
         />
       )}
 
       {isAuthModalOpen && (
         <AuthModal
           currentUser={currentUser}
-          onClose={() => setIsAuthModalOpen(false)}
+          initialMode={authMode}
+          onModeChange={(mode) => openAuthModal(mode)}
+          onClose={closeAuthModal}
           onAuthSuccess={setCurrentUser}
         />
       )}

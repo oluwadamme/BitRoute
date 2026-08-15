@@ -11,14 +11,14 @@ const variantStyles: Record<NonNullable<BadgeProps['variant']>, string> = {
   signal: 'bg-signal-wash border-signal/40 text-signal-deep',
   ochre: 'bg-ochre-wash border-ochre/40 text-ochre-deep',
   stamp: 'bg-stamp-wash border-stamp/35 text-stamp-deep',
-  neutral: 'bg-paper-sunk border-rule-strong text-ink-muted',
+  neutral: 'bg-surface-sunk border-rule-strong text-content-muted',
 };
 
 const dotStyles: Record<NonNullable<BadgeProps['variant']>, string> = {
   signal: 'bg-signal',
   ochre: 'bg-ochre',
   stamp: 'bg-stamp',
-  neutral: 'bg-ink-faint',
+  neutral: 'bg-content-faint',
 };
 
 export const Badge: React.FC<BadgeProps> = ({

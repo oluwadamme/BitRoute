@@ -6,7 +6,10 @@ namespace BitRoute.Infrastructure.Caching;
 public sealed class RedisAvailabilityCache : IAvailabilityCache
 {
     private static readonly TimeSpan DefaultTtl = TimeSpan.FromMinutes(5);
-    private const string CachePrefix = "availability:";
+    // Versioned so a deploy that changes the shape of ScheduleAvailabilityResponse cannot read
+    // back entries written by the previous shape. v2 added the seat plan (Layout, Row, Column);
+    // a v1 entry would deserialize with a null Layout.
+    private const string CachePrefix = "availability:v2:";
 
     private readonly ICacheService _cache;
     private readonly ILogger<RedisAvailabilityCache> _logger;

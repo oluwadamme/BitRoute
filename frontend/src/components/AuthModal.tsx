@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowLeft, LogIn, LogOut, Shield, Ticket, UserCheck, UserPlus } from 'lucide-react';
 import { api, toErrorMessage } from '../services/api';
-import { UserProfile } from '../types';
+import { UserProfile, UserRole } from '../types';
 import { Modal } from './ui/Modal';
 import { Button } from './ui/Button';
 import { Field, controlStyles } from './ui/Field';
@@ -12,6 +12,8 @@ interface AuthModalProps {
   currentUser: UserProfile | null;
   onClose: () => void;
   onAuthSuccess: (user: UserProfile | null) => void;
+  initialMode?: 'login' | 'register';
+  onModeChange?: (mode: 'login' | 'register') => void;
 }
 
 type Mode = 'login' | 'register' | 'provision';
@@ -34,8 +36,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   currentUser,
   onClose,
   onAuthSuccess,
+  initialMode = 'login',
+  onModeChange,
 }) => {
-  const [mode, setMode] = useState<Mode>('login');
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -62,6 +66,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   const switchMode = (nextMode: 'login' | 'register') => {
     setMode(nextMode);
+    onModeChange?.(nextMode);
     resetFormState();
   };
 
@@ -128,12 +133,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const modalTitle = showProfile ? (
     <div className="flex items-center gap-2">
       <UserCheck aria-hidden="true" className="w-5 h-5 text-stamp-deep" />
-      <span className="board text-xl text-ink">Your account</span>
+      <span className="board text-xl text-content">Your account</span>
     </div>
   ) : (
     <div className="flex items-center gap-2">
       <Ticket aria-hidden="true" className="w-5 h-5 text-signal-deep" />
-      <span className="board text-xl text-ink">
+      <span className="board text-xl text-content">
         {mode === 'login' ? 'Sign in' : mode === 'register' ? 'Create your account' : 'Add an operator'}
       </span>
     </div>
@@ -151,16 +156,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     <Modal isOpen={true} onClose={onClose} title={modalTitle} titleText={titleText}>
       {showProfile && currentUser ? (
         <div className="space-y-5">
-          <div className="rounded-ticket border border-rule bg-paper-sunk p-4 space-y-3 text-sm">
+          <div className="rounded-ticket border border-rule bg-surface-sunk p-4 space-y-3 text-sm">
             <div className="flex justify-between gap-4">
-              <span className="stencil text-ink-faint">Account ID</span>
+              <span className="stencil text-content-faint">Account ID</span>
               {/*
                 A 36-character UUID is noise on screen and unreadable aloud, so
                 only the short reference is shown. The full id stays selectable
                 via the tooltip and is exposed in full to assistive tech for
                 anyone who has to quote it to support.
               */}
-              <span className="figures text-ink">
+              <span className="figures text-content">
                 <span aria-hidden="true" title={currentUser.id}>
                   {shortRef(currentUser.id)}
                 </span>
@@ -168,17 +173,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </span>
             </div>
             <div className="flex justify-between gap-4">
-              <span className="stencil text-ink-faint">Email</span>
-              <span className="text-ink">{currentUser.email}</span>
+              <span className="stencil text-content-faint">Email</span>
+              <span className="text-content">{currentUser.email}</span>
             </div>
             <div className="flex justify-between gap-4">
-              <span className="stencil text-ink-faint">Account type</span>
-              <span className="text-ink">{currentUser.roles.join(', ') || 'Passenger'}</span>
+              <span className="stencil text-content-faint">Account type</span>
+              <span className="text-content">{currentUser.roles.join(', ') || 'Passenger'}</span>
             </div>
           </div>
 
           <div className="space-y-3">
-            {currentUser.roles.includes('Admin') && (
+            {currentUser.roles.includes(UserRole.Admin) && (
               <Button
                 variant="secondary"
                 className="w-full"
@@ -204,7 +209,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <NotificationBanner notification={notification} onDismiss={() => setNotification(null)} />
 
           {mode === 'provision' && (
-            <p className="text-xs text-ink-muted -mt-1">
+            <p className="text-xs text-content-muted -mt-1">
               This creates a new operator account with access to the operator console.
             </p>
           )}
@@ -278,7 +283,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </Button>
 
           {mode === 'provision' ? (
-            <p className="pt-1 text-center text-xs text-ink-muted">
+            <p className="pt-1 text-center text-xs text-content-muted">
               <button
                 type="button"
                 onClick={exitProvisionMode}
@@ -289,7 +294,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </button>
             </p>
           ) : (
-            <p className="pt-1 text-center text-xs text-ink-muted">
+            <p className="pt-1 text-center text-xs text-content-muted">
               {mode === 'login' ? (
                 <span>
                   New to BitRoute?{' '}

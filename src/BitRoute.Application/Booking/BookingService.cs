@@ -3,6 +3,7 @@ using BitRoute.Domain.Entities;
 using BitRoute.Domain.Enums;
 using BitRoute.Domain.Exceptions;
 using BitRoute.Domain.Interfaces;
+using BitRoute.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
 
 namespace BitRoute.Application.Booking;
@@ -83,7 +84,9 @@ public sealed class BookingService : IBookingService
     {
         await _validator.ValidateAndThrowAsync(request, cancellationToken);
 
-        var vehicle = Vehicle.Create(request.Name, request.Seats);
+        var layout = new VehicleLayout(request.RowCount, request.SeatsPerRow, request.AisleAfterColumn);
+        var placements = request.Seats.Select(s => new SeatPlacement(s.Number, s.Row, s.Column));
+        var vehicle = Vehicle.Create(request.Name, layout, placements);
         _vehicleRepository.Add(vehicle);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
@@ -95,7 +98,7 @@ public sealed class BookingService : IBookingService
         var vehicle = await _vehicleRepository.GetByIdAsync(id, cancellationToken);
         if (vehicle is null) throw new VehicleNotFoundException($"Vehicle '{id}' not found.");
 
-        var dto = new VehicleDto(vehicle.Id, vehicle.Name, vehicle.Seats.Select(s => s.Number).ToList());
+        var dto = new VehicleDto(vehicle.Id, vehicle.Name, OrderedSeatNumbers(vehicle));
         return ApiResponse.Success(dto, "Vehicle retrieved successfully.");
     }
 
@@ -103,7 +106,7 @@ public sealed class BookingService : IBookingService
     {
         var vehicles = await _vehicleRepository.GetAllAsync(cancellationToken);
         var dtos = vehicles
-            .Select(v => new VehicleDto(v.Id, v.Name, v.Seats.Select(s => s.Number).ToList()))
+            .Select(v => new VehicleDto(v.Id, v.Name, OrderedSeatNumbers(v)))
             .ToList();
         return ApiResponse.Success<IReadOnlyCollection<VehicleDto>>(dtos, "Vehicles retrieved successfully.");
     }
@@ -174,6 +177,9 @@ public sealed class BookingService : IBookingService
         var schedule = await _scheduleRepository.GetByIdAsync(scheduleId, cancellationToken);
         if (schedule is null) throw new ScheduleNotFoundException($"Schedule '{scheduleId}' not found.");
 
+        var layout = await _vehicleRepository.GetLayoutAsync(schedule.VehicleId, cancellationToken);
+        if (layout is null) throw new VehicleNotFoundException($"Vehicle '{schedule.VehicleId}' not found.");
+
         var seats = await _vehicleRepository.GetSeatsByVehicleIdAsync(schedule.VehicleId, cancellationToken);
         var activeBookings = await _bookingRepository.GetActiveBookingsAsync(scheduleId, travelDate, cancellationToken);
 
@@ -184,11 +190,14 @@ public sealed class BookingService : IBookingService
                 b.BoardingIndex < alightingIndex &&
                 b.AlightingIndex > boardingIndex);
 
-            return new SeatAvailabilityDto(seat.Id, seat.Number, isAvailable);
+            return new SeatAvailabilityDto(seat.Id, seat.Number, isAvailable, seat.Row, seat.Column);
         }).ToList();
 
+        var layoutDto = new VehicleLayoutDto(
+            layout.Value.RowCount, layout.Value.SeatsPerRow, layout.Value.AisleAfterColumn);
+
         var price = schedule.GetPrice(boardingIndex, alightingIndex);
-        var response = new ScheduleAvailabilityResponse(scheduleId, travelDate, price, seatAvailabilities);
+        var response = new ScheduleAvailabilityResponse(scheduleId, travelDate, price, layoutDto, seatAvailabilities);
 
         await _cache.SetAsync(scheduleId, travelDate, boardingIndex, alightingIndex, response, cancellationToken);
 
@@ -275,7 +284,7 @@ public sealed class BookingService : IBookingService
 
     public async Task<ApiResponse<PaystackInitializeResponse>> InitializePaymentAsync(
         Guid bookingId,
-        string callbackUrl,
+        string email,
         CancellationToken cancellationToken = default)
     {
         var booking = await _bookingRepository.GetByIdAsync(bookingId, cancellationToken);
@@ -294,10 +303,9 @@ public sealed class BookingService : IBookingService
         }
 
         var paystackResponse = await _paystackService.InitializeTransactionAsync(
-            "passenger@bitroute.com",
+            email,
             booking.Price,
             booking.Id.ToString(),
-            callbackUrl,
             cancellationToken);
 
         return ApiResponse.Success(paystackResponse, "Paystack transaction initialized.");
@@ -342,6 +350,17 @@ public sealed class BookingService : IBookingService
         _logger.LogInformation("Booking '{BookingId}' cancelled successfully by user '{UserId}'.", bookingId, userId);
         return ApiResponse.SuccessMessage("Booking cancelled successfully.");
     }
+
+    /// <summary>
+    /// Seat labels in seat-plan order, front-left to back-right. The navigation collection comes
+    /// back in whatever order the database chose, which is not stable across requests.
+    /// </summary>
+    private static List<string> OrderedSeatNumbers(Vehicle vehicle)
+        => vehicle.Seats
+            .OrderBy(s => s.Row)
+            .ThenBy(s => s.Column)
+            .Select(s => s.Number)
+            .ToList();
 
     private static BookingDto MapToDto(SeatBooking b)
         => new(

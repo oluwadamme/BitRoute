@@ -66,7 +66,17 @@ public class ConcurrencyTests : IClassFixture<WebApplicationFactory<Program>>, I
         db.Database.EnsureCreated();
 
         var route = Route.Create("Lagos to Ibadan", new[] { "Lagos", "Shagamu", "Ibadan" });
-        var vehicle = Vehicle.Create("Luxury Coach", new[] { "Seat1", "Seat2" });
+
+        // A single row of two seats, no aisle. The seat plan is irrelevant to this test; what
+        // matters is that Seat1 is the one seat every request fights over.
+        var vehicle = Vehicle.Create(
+            "Luxury Coach",
+            new VehicleLayout(rowCount: 1, seatsPerRow: 2, aisleAfterColumn: null),
+            new[]
+            {
+                new SeatPlacement("Seat1", 1, 1),
+                new SeatPlacement("Seat2", 1, 2)
+            });
 
         db.Routes.Add(route);
         db.Vehicles.Add(vehicle);
@@ -118,7 +128,7 @@ public class ConcurrencyTests : IClassFixture<WebApplicationFactory<Program>>, I
 
         // All users request the overlapping segment [0, 2)
         var requests = Enumerable.Range(0, concurrentRequestCount)
-            .Select(i => new HoldSeatRequest(_scheduleId, _travelDate, _seatId, 0, 2, $"idempotency-{i}"))
+            .Select(i => new HoldSeatRequest(Guid.NewGuid(), _scheduleId, _travelDate, _seatId, 0, 2, $"idempotency-{i}"))
             .ToList();
 
         // Fire all requests concurrently

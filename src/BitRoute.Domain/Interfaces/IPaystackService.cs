@@ -8,7 +8,6 @@ public interface IPaystackService
         string email,
         int amountInKobo,
         string reference,
-        string callbackUrl,
         CancellationToken cancellationToken = default);
 
     bool VerifyWebhookSignature(string payload, string signatureHeader);

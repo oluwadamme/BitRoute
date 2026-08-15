@@ -10,19 +10,24 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantStyles: Record<NonNullable<ButtonProps['variant']>, string> = {
-  primary:
-    'bg-signal text-paper-raised border border-signal-deep hover:bg-signal-deep active:shadow-press shadow-stub',
+  // Dark label on the lit accent: measured at 6.58:1.
+  primary: 'bg-signal text-surface border border-signal hover:bg-signal-deep active:shadow-press',
   secondary:
-    'bg-paper-raised text-ink border border-rule-strong hover:bg-paper-sunk active:shadow-press',
+    'bg-surface-raised text-content border border-rule-strong hover:bg-surface-sunk active:shadow-press',
   danger:
-    'bg-paper-raised text-signal-deep border border-signal/45 hover:bg-signal-wash active:shadow-press',
-  ghost: 'text-ink-muted border border-transparent hover:text-ink hover:bg-paper-sunk',
+    'bg-surface-raised text-signal-deep border border-signal/45 hover:bg-signal-wash active:shadow-press',
+  ghost: 'text-content-muted border border-transparent hover:text-content hover:bg-surface-sunk',
 };
 
+/*
+ * Every size clears a 44x44 CSS-pixel target. The previous scale produced 30px
+ * and 42px controls, which are awkward on a phone and below the interaction
+ * guidance this project holds itself to.
+ */
 const sizeStyles: Record<NonNullable<ButtonProps['size']>, string> = {
-  sm: 'px-3 py-1.5 text-xs',
-  md: 'px-4 py-2.5 text-sm',
-  lg: 'px-6 py-3.5 text-base',
+  sm: 'min-h-11 px-3.5 text-sm',
+  md: 'min-h-11 px-4 text-sm',
+  lg: 'min-h-[3.25rem] px-6 text-base',
 };
 
 export const Button: React.FC<ButtonProps> = ({
@@ -46,7 +51,10 @@ export const Button: React.FC<ButtonProps> = ({
       className={[
         'inline-flex items-center justify-center gap-2 rounded-ticket font-semibold',
         'tracking-signage transition-colors duration-150',
-        'disabled:opacity-45 disabled:cursor-not-allowed disabled:shadow-none',
+        // A native <button> computes to `cursor: default`, so the pointer has
+        // to be asked for explicitly.
+        'cursor-pointer disabled:cursor-not-allowed',
+        'disabled:opacity-45 disabled:shadow-none',
         variantStyles[variant],
         sizeStyles[size],
         className,
@@ -60,10 +68,9 @@ export const Button: React.FC<ButtonProps> = ({
             className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin shrink-0"
           />
           {/*
-            The label stays mounted while loading. Swapping the children out
-            for a bare spinner, as the previous version did, strips the
-            button's accessible name mid-action, so a screen reader announces
-            nothing at the moment the user most needs feedback.
+            The label stays mounted while loading. Swapping the children out for
+            a bare spinner strips the button's accessible name at the moment the
+            user most needs feedback.
           */}
           <span>{children}</span>
           <span className="sr-only">{loadingLabel}</span>

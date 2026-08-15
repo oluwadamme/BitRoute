@@ -5,10 +5,16 @@ export interface ApiResponse<T> {
   errors?: Record<string, string[]>;
 }
 
+export enum UserRole {
+  Admin = 'Admin',
+  Operator = 'Operator',
+  Passenger = 'Passenger',
+}
+
 export interface AuthResult {
   userId: string;
   email: string;
-  role: string;
+  role: UserRole;
   accessToken: string;
   refreshToken: string;
 }
@@ -16,7 +22,7 @@ export interface AuthResult {
 export interface UserProfile {
   id: string;
   email: string;
-  roles: string[];
+  roles: UserRole[];
 }
 
 export interface RouteDto {
@@ -36,9 +42,18 @@ export interface VehicleDto {
   seats: string[];
 }
 
+export interface CreateSeatDto {
+  number: string;
+  row: number;
+  column: number;
+}
+
 export interface CreateVehicleRequest {
   name: string;
-  seats: string[];
+  rowCount: number;
+  seatsPerRow: number;
+  aisleAfterColumn: number | null;
+  seats: CreateSeatDto[];
 }
 
 export interface ScheduleLegDto {
@@ -73,12 +88,21 @@ export interface SeatAvailabilityDto {
   seatId: string;
   seatNumber: string;
   isAvailable: boolean;
+  row: number;
+  column: number;
+}
+
+export interface VehicleLayoutDto {
+  rowCount: number;
+  seatsPerRow: number;
+  aisleAfterColumn: number | null;
 }
 
 export interface ScheduleAvailabilityResponse {
   scheduleId: string;
   travelDate: string;
   price: number;
+  layout: VehicleLayoutDto;
   seats: SeatAvailabilityDto[];
 }
 

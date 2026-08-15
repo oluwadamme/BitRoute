@@ -1,5 +1,6 @@
 import React, { useEffect, useId, useRef } from 'react';
 import { X } from 'lucide-react';
+import { IconButton } from './IconButton';
 
 interface ModalProps {
   isOpen: boolean;
@@ -27,14 +28,7 @@ const FOCUSABLE = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(',');
 
-/**
- * An accessible dialog.
- *
- * The previous implementation was a plain div: no role, no focus management,
- * no Escape handling, and a backdrop that swallowed clicks. Keyboard users
- * could tab straight out of the dialog into the page behind it while it was
- * still covering the screen.
- */
+
 export const Modal: React.FC<ModalProps> = ({
   isOpen,
   onClose,
@@ -63,9 +57,9 @@ export const Modal: React.FC<ModalProps> = ({
     document.body.style.overflow = 'hidden';
 
     /*
-     * Key handling lives on the document rather than on a JSX handler so that
-     * Escape works wherever focus happens to be, including on the browser
-     * chrome the dialog does not own. Capture phase keeps it ahead of anything
+     * Key handling lives on the document, in the CAPTURE phase, rather than on
+     * a JSX handler. That makes Escape work wherever focus happens to be —
+     * including places the dialog does not own — and keeps it ahead of anything
      * inside the dialog that also listens for Escape.
      */
     const onKeyDown = (event: KeyboardEvent) => {
@@ -99,11 +93,13 @@ export const Modal: React.FC<ModalProps> = ({
     };
 
     /*
-     * Click-outside is a pointer-only convenience, so it listens on the
-     * document rather than sitting as a handler on a presentational backdrop
-     * div. Keyboard users are served by Escape and the labelled close button.
-     * Tracking mousedown, not click, means a drag that starts inside the panel
-     * and releases outside it does not dismiss the dialog.
+     * Click-outside is a pointer-only convenience, so it listens on the document
+     * rather than sitting as a handler on a presentational backdrop div — which
+     * would be an interactive element with no role and no keyboard path.
+     * Keyboard users are served by Escape and the labelled close button.
+     *
+     * It tracks MOUSEDOWN, not click, so a drag that starts inside the panel and
+     * releases outside it does not dismiss the dialog.
      */
     const onPointerDown = (event: MouseEvent) => {
       const target = event.target as Node | null;
@@ -126,7 +122,7 @@ export const Modal: React.FC<ModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/45 backdrop-blur-[2px]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-surface-sunk/70 backdrop-blur-[2px]">
       <div
         ref={panelRef}
         role="dialog"
@@ -134,20 +130,24 @@ export const Modal: React.FC<ModalProps> = ({
         aria-labelledby={titleId}
         aria-label={titleText}
         tabIndex={-1}
-        className={`stock shadow-raised w-full ${widthStyles[maxWidth]} outline-none animate-stub-in`}
+        /*
+         * `border-rule-strong` overrides `.stock`'s hairline deliberately. On the
+         * dark theme the panel sits at 1.1:1 against the dimmed page behind it,
+         * and `shadow-raised`'s drop shadow is black-on-near-black so it adds
+         * nothing. The stronger border is what makes the panel edge visible.
+         */
+        className={`stock shadow-raised border-rule-strong w-full ${widthStyles[maxWidth]} outline-none animate-stub-in`}
       >
         <div className="flex items-start justify-between gap-4 px-6 py-4 border-b border-rule">
           <div id={titleId} className="min-w-0">
             {title}
           </div>
-          <button
-            type="button"
+          <IconButton
+            label="Close dialog"
+            inset
             onClick={onClose}
-            aria-label="Close dialog"
-            className="shrink-0 p-1.5 -m-1 rounded-ticket text-ink-muted hover:text-ink hover:bg-paper-sunk transition-colors"
-          >
-            <X className="w-5 h-5" aria-hidden="true" />
-          </button>
+            icon={<X className="w-5 h-5" />}
+          />
         </div>
 
         <div className="px-6 py-5">{children}</div>

@@ -40,7 +40,7 @@ public interface IBookingService
 
     Task<ApiResponse<PaystackInitializeResponse>> InitializePaymentAsync(
         Guid bookingId,
-        string callbackUrl,
+        string email,
         CancellationToken cancellationToken = default);
 
     Task<ApiResponse<BookingDto>> GetBookingAsync(

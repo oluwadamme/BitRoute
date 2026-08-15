@@ -1,10 +1,8 @@
-using System.Security.Claims;
 using BitRoute.Application;
 using BitRoute.Application.Booking;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.IdentityModel.JsonWebTokens;
 
 namespace BitRoute.Api.Controllers;
 
@@ -26,8 +24,7 @@ public sealed class BookingsController : ControllerBase
     public async Task<ActionResult<ApiResponse<BookingDto>>> HoldSeat(
         HoldSeatRequest request, CancellationToken cancellationToken)
     {
-        var passengerId = GetUserId();
-        var response = await _booking.HoldSeatAsync(passengerId, request, cancellationToken);
+        var response = await _booking.HoldSeatAsync(request.PassengerId, request, cancellationToken);
         return Ok(response);
     }
 
@@ -46,10 +43,10 @@ public sealed class BookingsController : ControllerBase
     [HttpPost("{bookingId:guid}/pay")]
     public async Task<ActionResult<ApiResponse<BitRoute.Domain.Interfaces.PaystackInitializeResponse>>> InitializePaystackPayment(
         Guid bookingId,
-        [FromQuery] string callbackUrl = "http://localhost:3000/payment/callback",
+        [FromBody] InitializePaymentRequest request,
         CancellationToken cancellationToken = default)
     {
-        var response = await _booking.InitializePaymentAsync(bookingId, callbackUrl, cancellationToken);
+        var response = await _booking.InitializePaymentAsync(bookingId, request.Email, cancellationToken);
         return Ok(response);
     }
 
@@ -57,10 +54,11 @@ public sealed class BookingsController : ControllerBase
     [Authorize]
     [HttpGet("{bookingId:guid}")]
     public async Task<ActionResult<ApiResponse<BookingDto>>> GetBooking(
-        Guid bookingId, CancellationToken cancellationToken)
+        Guid bookingId,
+        [FromQuery] Guid userId,
+        [FromQuery] string userRole,
+        CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        var userRole = GetUserRole();
         var response = await _booking.GetBookingAsync(bookingId, userId, userRole, cancellationToken);
         return Ok(response);
     }
@@ -69,9 +67,9 @@ public sealed class BookingsController : ControllerBase
     [Authorize]
     [HttpGet("me")]
     public async Task<ActionResult<ApiResponse<IReadOnlyCollection<BookingDto>>>> GetMyBookings(
+        [FromQuery] Guid passengerId,
         CancellationToken cancellationToken)
     {
-        var passengerId = GetUserId();
         var response = await _booking.GetMyBookingsAsync(passengerId, cancellationToken);
         return Ok(response);
     }
@@ -80,28 +78,12 @@ public sealed class BookingsController : ControllerBase
     [Authorize]
     [HttpDelete("{bookingId:guid}")]
     public async Task<ActionResult<ApiResponse<object>>> CancelBooking(
-        Guid bookingId, CancellationToken cancellationToken)
+        Guid bookingId,
+        [FromQuery] Guid userId,
+        [FromQuery] string userRole,
+        CancellationToken cancellationToken)
     {
-        var userId = GetUserId();
-        var userRole = GetUserRole();
         var response = await _booking.CancelBookingAsync(bookingId, userId, userRole, cancellationToken);
         return Ok(response);
-    }
-
-    private Guid GetUserId()
-    {
-        var sub = User.FindFirst(ClaimTypes.NameIdentifier)?.Value 
-            ?? User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
-            ?? User.Identity?.Name;
-
-        if (Guid.TryParse(sub, out var userId)) return userId;
-        throw new InvalidOperationException("Could not resolve user ID from authenticated token claims.");
-    }
-
-    private string GetUserRole()
-    {
-        return User.FindFirst(ClaimTypes.Role)?.Value 
-            ?? User.FindFirst("role")?.Value 
-            ?? string.Empty;
     }
 }

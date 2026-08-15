@@ -1,23 +1,20 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Clock, Plus, RefreshCw, Send, Settings } from 'lucide-react';
+import { Clock, Plus, RefreshCw, Send, Settings, UserPlus } from 'lucide-react';
 import { api, isAbortError, toErrorMessage } from '../services/api';
 import { telemetryService } from '../services/telemetry';
 import { formatDepartureTime, formatFare, shortRef } from '../lib/format';
-import { CreateScheduleLegDto, RouteDto, ScheduleDto, VehicleDto } from '../types';
+import { CreateScheduleLegDto, CreateSeatDto, RouteDto, ScheduleDto, UserProfile, UserRole, VehicleDto } from '../types';
 import { Card } from './ui/Card';
 import { Button } from './ui/Button';
 import { Badge } from './ui/Badge';
 import { Field, controlStyles } from './ui/Field';
 import { NotificationBanner, Notification } from './ui/NotificationBanner';
 
-type TabKey = 'routes' | 'vehicles' | 'schedules' | 'telemetry';
+type TabKey = 'routes' | 'vehicles' | 'schedules' | 'telemetry' | 'operators';
 
-const TABS: { key: TabKey; label: string }[] = [
-  { key: 'routes', label: 'Routes' },
-  { key: 'vehicles', label: 'Vehicles' },
-  { key: 'schedules', label: 'Schedules' },
-  { key: 'telemetry', label: 'Telemetry' },
-];
+interface OperatorTabProps {
+  currentUser: UserProfile | null;
+}
 
 /** Splits a comma-separated field into trimmed, non-empty tokens. */
 const parseCommaList = (value: string): string[] =>
@@ -46,7 +43,69 @@ const parseCoordinate = (raw: string, min: number, max: number, label: string): 
   return { value: n };
 };
 
-export const OperatorTab: React.FC = () => {
+const buildCreateSeatDtos = (
+  seatLabels: string[],
+  seatsPerRow: number,
+  aisleAfterColumn: number | null
+): CreateSeatDto[] => {
+  const dtos: CreateSeatDto[] = [];
+  const aisleCol = aisleAfterColumn && aisleAfterColumn > 0 ? aisleAfterColumn + 1 : null;
+
+  const isPositional = seatLabels.length > 0 && seatLabels.every((label) => /^(\d+)([A-Z])$/i.test(label.trim()));
+
+  if (isPositional) {
+    for (const label of seatLabels) {
+      const match = /^(\d+)([A-Z])$/i.exec(label.trim());
+      if (match) {
+        const row = parseInt(match[1], 10);
+        const letterIdx = match[2].toUpperCase().charCodeAt(0) - 64;
+        let col = letterIdx;
+        if (aisleAfterColumn && letterIdx > aisleAfterColumn) {
+          col = letterIdx + 1;
+        }
+        dtos.push({
+          number: `${row}${match[2].toUpperCase()}`,
+          row,
+          column: col,
+        });
+      }
+    }
+  } else {
+    let currRow = 1;
+    let currCol = 1;
+    for (const label of seatLabels) {
+      if (aisleCol && currCol === aisleCol) {
+        currCol++;
+      }
+      if (currCol > seatsPerRow) {
+        currRow++;
+        currCol = 1;
+        if (aisleCol && currCol === aisleCol) {
+          currCol++;
+        }
+      }
+      dtos.push({
+        number: label.trim(),
+        row: currRow,
+        column: currCol,
+      });
+      currCol++;
+    }
+  }
+
+  return dtos;
+};
+
+export const OperatorTab: React.FC<OperatorTabProps> = ({ currentUser }) => {
+  const isAdmin = Boolean(currentUser?.roles?.includes(UserRole.Admin));
+
+  const visibleTabs: { key: TabKey; label: string }[] = [
+    { key: 'routes', label: 'Routes' },
+    { key: 'vehicles', label: 'Vehicles' },
+    { key: 'schedules', label: 'Schedules' },
+    { key: 'telemetry', label: 'Telemetry' },
+    ...(isAdmin ? [{ key: 'operators' as TabKey, label: 'Onboard Operator' }] : []),
+  ];
   const [routes, setRoutes] = useState<RouteDto[]>([]);
   const [vehicles, setVehicles] = useState<VehicleDto[]>([]);
   const [schedules, setSchedules] = useState<ScheduleDto[]>([]);
@@ -57,12 +116,7 @@ export const OperatorTab: React.FC = () => {
   const notify = (type: Notification['type'], message: string) => setNotification({ type, message });
 
   const [activeTab, setActiveTab] = useState<TabKey>('routes');
-  const tabRefs = useRef<Record<TabKey, HTMLButtonElement | null>>({
-    routes: null,
-    vehicles: null,
-    schedules: null,
-    telemetry: null,
-  });
+  const tabRefs = useRef<Partial<Record<TabKey, HTMLButtonElement | null>>>({});
 
   const focusTab = (key: TabKey) => {
     setActiveTab(key);
@@ -71,16 +125,22 @@ export const OperatorTab: React.FC = () => {
 
   const handleTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
     let nextIndex: number | null = null;
-    if (event.key === 'ArrowRight') nextIndex = (index + 1) % TABS.length;
-    else if (event.key === 'ArrowLeft') nextIndex = (index - 1 + TABS.length) % TABS.length;
+    if (event.key === 'ArrowRight') nextIndex = (index + 1) % visibleTabs.length;
+    else if (event.key === 'ArrowLeft') nextIndex = (index - 1 + visibleTabs.length) % visibleTabs.length;
     else if (event.key === 'Home') nextIndex = 0;
-    else if (event.key === 'End') nextIndex = TABS.length - 1;
+    else if (event.key === 'End') nextIndex = visibleTabs.length - 1;
 
     if (nextIndex !== null) {
       event.preventDefault();
-      focusTab(TABS[nextIndex].key);
+      focusTab(visibleTabs[nextIndex].key);
     }
   };
+
+  // Provision Operator Form State (Admin Only)
+  const [opEmail, setOpEmail] = useState('');
+  const [opPassword, setOpPassword] = useState('');
+  const [opFullName, setOpFullName] = useState('');
+  const [isProvisioningOp, setIsProvisioningOp] = useState(false);
 
   // Create Route Form State
   const [routeName, setRouteName] = useState('');
@@ -92,6 +152,9 @@ export const OperatorTab: React.FC = () => {
 
   // Create Vehicle Form State
   const [vehicleName, setVehicleName] = useState('');
+  const [vehicleRowCount, setVehicleRowCount] = useState('4');
+  const [vehicleSeatsPerRow, setVehicleSeatsPerRow] = useState('5');
+  const [vehicleAisleAfterCol, setVehicleAisleAfterCol] = useState('2');
   const [vehicleSeats, setVehicleSeats] = useState('');
   const [vehicleNameError, setVehicleNameError] = useState<string | null>(null);
   const [vehicleSeatsError, setVehicleSeatsError] = useState<string | null>(null);
@@ -179,9 +242,11 @@ export const OperatorTab: React.FC = () => {
     setIsCreatingRoute(true);
     try {
       const id = await api.createRoute({ name: routeName.trim(), stops });
-      notify('success', `Route "${routeName.trim()}" created (ref ${shortRef(id)}).`);
+      notify('success', `Route "${routeName.trim()}" created (ref ${shortRef(id)}). Switch to Schedules to configure it.`);
       setRouteName('');
       setRouteStops('');
+      setSchedRouteId(id);
+      setActiveTab('schedules');
       setReloadNonce((n) => n + 1);
     } catch (err) {
       notify('error', toErrorMessage(err, "We couldn't create that route. Try again."));
@@ -200,12 +265,37 @@ export const OperatorTab: React.FC = () => {
     setVehicleSeatsError(seatsError);
     if (nameError || seatsError) return;
 
+    const parsedAisle = vehicleAisleAfterCol.trim() ? parseInt(vehicleAisleAfterCol.trim(), 10) : null;
+    const aisleAfterColumn = parsedAisle && Number.isFinite(parsedAisle) && parsedAisle > 0 ? parsedAisle : null;
+
+    let rowCountNum = parseInt(vehicleRowCount.trim(), 10) || 4;
+    let seatsPerRowNum = parseInt(vehicleSeatsPerRow.trim(), 10) || 5;
+
+    const dtos = buildCreateSeatDtos(seats, seatsPerRowNum, aisleAfterColumn);
+
+    const maxRowInDtos = dtos.length > 0 ? Math.max(...dtos.map((d) => d.row)) : 1;
+    const maxColInDtos = dtos.length > 0 ? Math.max(...dtos.map((d) => d.column)) : 1;
+
+    if (rowCountNum < maxRowInDtos) rowCountNum = maxRowInDtos;
+    if (seatsPerRowNum < maxColInDtos) seatsPerRowNum = maxColInDtos;
+
+    const sanitizedAisle =
+      aisleAfterColumn && aisleAfterColumn >= 1 && aisleAfterColumn < seatsPerRowNum ? aisleAfterColumn : null;
+
     setIsCreatingVehicle(true);
     try {
-      const id = await api.createVehicle({ name: vehicleName.trim(), seats });
-      notify('success', `Vehicle "${vehicleName.trim()}" created (ref ${shortRef(id)}).`);
+      const id = await api.createVehicle({
+        name: vehicleName.trim(),
+        rowCount: rowCountNum,
+        seatsPerRow: seatsPerRowNum,
+        aisleAfterColumn: sanitizedAisle,
+        seats: dtos,
+      });
+      notify('success', `Vehicle "${vehicleName.trim()}" created (ref ${shortRef(id)}). Switch to Schedules to use it.`);
       setVehicleName('');
       setVehicleSeats('');
+      setSchedVehicleId(id);
+      setActiveTab('schedules');
       setReloadNonce((n) => n + 1);
     } catch (err) {
       notify('error', toErrorMessage(err, "We couldn't create that vehicle. Try again."));
@@ -299,6 +389,38 @@ export const OperatorTab: React.FC = () => {
     }
   };
 
+  const handleProvisionOperator = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isAdmin) return;
+
+    if (!opEmail.trim() || !opPassword.trim() || !opFullName.trim()) {
+      notify('error', 'Enter full name, email, and password to create an operator account.');
+      return;
+    }
+
+    if (opPassword.length < 8) {
+      notify('error', 'Password must be at least 8 characters long.');
+      return;
+    }
+
+    setIsProvisioningOp(true);
+    try {
+      await api.provisionOperator({
+        email: opEmail.trim(),
+        password: opPassword,
+        fullName: opFullName.trim(),
+      });
+      notify('success', `Operator account created for ${opEmail.trim()}.`);
+      setOpEmail('');
+      setOpPassword('');
+      setOpFullName('');
+    } catch (err) {
+      notify('error', toErrorMessage(err, "We couldn't create that operator account. Check details and try again."));
+    } finally {
+      setIsProvisioningOp(false);
+    }
+  };
+
   return (
     <Card
       emphasis
@@ -321,8 +443,8 @@ export const OperatorTab: React.FC = () => {
             Reload
           </Button>
 
-          <div role="tablist" aria-label="Operator console sections" className="flex gap-1 bg-paper-sunk border border-rule rounded-ticket p-1">
-            {TABS.map((tab, index) => {
+          <div role="tablist" aria-label="Operator console sections" className="flex gap-1 bg-surface-sunk border border-rule rounded-ticket p-1">
+            {visibleTabs.map((tab, index) => {
               const selected = activeTab === tab.key;
               return (
                 <button
@@ -339,7 +461,7 @@ export const OperatorTab: React.FC = () => {
                   onClick={() => setActiveTab(tab.key)}
                   onKeyDown={(event) => handleTabKeyDown(event, index)}
                   className={`px-3 py-1.5 rounded-ticket stencil transition-colors ${
-                    selected ? 'bg-signal text-paper-raised' : 'text-ink-muted hover:text-ink'
+                    selected ? 'bg-signal text-surface' : 'text-content-muted hover:text-content'
                   }`}
                 >
                   {tab.label}
@@ -363,11 +485,11 @@ export const OperatorTab: React.FC = () => {
           className="space-y-6"
         >
           <form onSubmit={handleCreateRoute} className="stock p-4 space-y-4">
-            <h3 className="text-sm font-bold text-ink flex items-center gap-2">
+            <h3 className="text-sm font-bold text-content flex items-center gap-2">
               <Plus className="w-4 h-4 text-signal" aria-hidden="true" />
               Define a new route
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
               <Field label="Route name" error={routeNameError}>
                 {(ids) => (
                   <input
@@ -398,7 +520,7 @@ export const OperatorTab: React.FC = () => {
                         {parsedRouteStops.map((stop, i) => (
                           <React.Fragment key={`${stop}-${i}`}>
                             {i > 0 && (
-                              <span aria-hidden="true" className="text-ink-faint text-xs">
+                              <span aria-hidden="true" className="text-content-faint text-xs">
                                 →
                               </span>
                             )}
@@ -417,9 +539,9 @@ export const OperatorTab: React.FC = () => {
           </form>
 
           <div className="space-y-2">
-            <h4 className="stencil text-ink-muted">Configured routes</h4>
+            <h4 className="stencil text-content-muted">Configured routes</h4>
             {isLoadingData && routes.length === 0 ? (
-              <p className="flex items-center gap-2 text-xs text-ink-muted py-3">
+              <p className="flex items-center gap-2 text-xs text-content-muted py-3">
                 <span
                   aria-hidden="true"
                   className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin shrink-0"
@@ -427,13 +549,26 @@ export const OperatorTab: React.FC = () => {
                 Loading routes…
               </p>
             ) : routes.length === 0 ? (
-              <p className="text-xs text-ink-muted py-3">No routes yet. Create one above.</p>
+                <p className="text-xs text-content-muted py-3">No routes yet. Create one above.</p>
             ) : (
               <ul className="ruled">
                 {routes.map((r) => (
-                  <li key={r.id} className="py-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                    <span className="font-semibold text-ink text-sm">{r.name}</span>
-                    <span className="figures text-xs text-ink-muted">{r.stops.join(' → ')}</span>
+                  <li key={r.id} className="py-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="font-semibold text-content text-sm">{r.name}</span>
+                      <span className="figures text-xs text-content-muted">{r.stops.join(' → ')}</span>
+                    </div>
+                    {!schedules.some((s) => s.routeId === r.id) && (
+                      <Button 
+                        type="button" 
+                        variant="secondary" 
+                        size="sm" 
+                        className="shrink-0"
+                        onClick={() => { setSchedRouteId(r.id); setActiveTab('schedules'); }}
+                      >
+                        Create schedule
+                      </Button>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -451,11 +586,11 @@ export const OperatorTab: React.FC = () => {
           className="space-y-6"
         >
           <form onSubmit={handleCreateVehicle} className="stock p-4 space-y-4">
-            <h3 className="text-sm font-bold text-ink flex items-center gap-2">
+            <h3 className="text-sm font-bold text-content flex items-center gap-2">
               <Plus className="w-4 h-4 text-signal" aria-hidden="true" />
               Define a new vehicle
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
               <Field label="Vehicle name" error={vehicleNameError}>
                 {(ids) => (
                   <input
@@ -494,15 +629,61 @@ export const OperatorTab: React.FC = () => {
                 )}
               </Field>
             </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
+              {/*
+                Labels here are kept short and of similar length on purpose.
+                They sit above their control, so a label long enough to wrap
+                pushes its own input down and breaks alignment with the
+                columns either side of it. Detail belongs in the hint, which
+                renders below the control and cannot affect alignment.
+              */}
+              <Field label="Rows">
+                {(ids) => (
+                  <input
+                    {...ids}
+                    type="number"
+                    min={1}
+                    className={controlStyles}
+                    value={vehicleRowCount}
+                    onChange={(e) => setVehicleRowCount(e.target.value)}
+                  />
+                )}
+              </Field>
+              <Field label="Row width" hint="Counts the aisle as a column.">
+                {(ids) => (
+                  <input
+                    {...ids}
+                    type="number"
+                    min={1}
+                    className={controlStyles}
+                    value={vehicleSeatsPerRow}
+                    onChange={(e) => setVehicleSeatsPerRow(e.target.value)}
+                  />
+                )}
+              </Field>
+              <Field label="Aisle after" hint="Optional. 2 gives a 2+2 layout.">
+                {(ids) => (
+                  <input
+                    {...ids}
+                    type="number"
+                    min={1}
+                    placeholder="None"
+                    className={controlStyles}
+                    value={vehicleAisleAfterCol}
+                    onChange={(e) => setVehicleAisleAfterCol(e.target.value)}
+                  />
+                )}
+              </Field>
+            </div>
             <Button type="submit" size="sm" isLoading={isCreatingVehicle} loadingLabel="Creating vehicle">
               Create vehicle
             </Button>
           </form>
 
           <div className="space-y-2">
-            <h4 className="stencil text-ink-muted">Configured vehicles</h4>
+            <h4 className="stencil text-content-muted">Configured vehicles</h4>
             {isLoadingData && vehicles.length === 0 ? (
-              <p className="flex items-center gap-2 text-xs text-ink-muted py-3">
+              <p className="flex items-center gap-2 text-xs text-content-muted py-3">
                 <span
                   aria-hidden="true"
                   className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin shrink-0"
@@ -510,15 +691,28 @@ export const OperatorTab: React.FC = () => {
                 Loading vehicles…
               </p>
             ) : vehicles.length === 0 ? (
-              <p className="text-xs text-ink-muted py-3">No vehicles yet. Create one above.</p>
+                <p className="text-xs text-content-muted py-3">No vehicles yet. Create one above.</p>
             ) : (
               <ul className="ruled">
                 {vehicles.map((v) => (
-                  <li key={v.id} className="py-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                    <span className="font-semibold text-ink text-sm">{v.name}</span>
-                    <span className="figures text-xs text-ink-muted">
-                      {v.seats.length} seat{v.seats.length === 1 ? '' : 's'}: {v.seats.join(', ')}
-                    </span>
+                  <li key={v.id} className="py-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="font-semibold text-content text-sm">{v.name}</span>
+                      <span className="figures text-xs text-content-muted">
+                        {v.seats.length} seat{v.seats.length === 1 ? '' : 's'}: {v.seats.join(', ')}
+                      </span>
+                    </div>
+                    {!schedules.some((s) => s.vehicleId === v.id) && (
+                      <Button 
+                        type="button" 
+                        variant="secondary" 
+                        size="sm" 
+                        className="shrink-0"
+                        onClick={() => { setSchedVehicleId(v.id); setActiveTab('schedules'); }}
+                      >
+                        Create schedule
+                      </Button>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -535,13 +729,37 @@ export const OperatorTab: React.FC = () => {
           hidden={activeTab !== 'schedules'}
           className="space-y-6"
         >
+          {routes.length === 0 || vehicles.length === 0 ? (
+            <div className="stock p-6 text-center space-y-4">
+              {isLoadingData ? (
+                <p className="flex items-center justify-center gap-2 text-sm text-content-muted">
+                  <span aria-hidden="true" className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin shrink-0" />
+                  Loading prerequisites…
+                </p>
+              ) : (
+                <>
+                  <p className="text-sm text-content-muted">
+                    You need at least one route and one vehicle before you can create a schedule.
+                  </p>
+                  <div className="flex flex-wrap items-center justify-center gap-4">
+                    {routes.length === 0 && (
+                      <Button type="button" onClick={() => setActiveTab('routes')}>Create a route</Button>
+                    )}
+                    {vehicles.length === 0 && (
+                      <Button type="button" onClick={() => setActiveTab('vehicles')}>Create a vehicle</Button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
           <form onSubmit={handleCreateSchedule} className="stock p-4 space-y-4">
-            <h3 className="text-sm font-bold text-ink flex items-center gap-2">
+            <h3 className="text-sm font-bold text-content flex items-center gap-2">
               <Plus className="w-4 h-4 text-signal" aria-hidden="true" />
               Define a new schedule
             </h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
               <Field label="Route" error={scheduleRouteError}>
                 {(ids) => (
                   <select
@@ -599,11 +817,11 @@ export const OperatorTab: React.FC = () => {
             {/* Dynamic Leg Fares */}
             {selectedSchedRoute && selectedSchedRoute.stops.length >= 2 && (
               <fieldset className="space-y-3 pt-3 border-t border-rule">
-                <legend className="stencil text-ink-muted mb-1">Leg fares</legend>
-                <p className="text-xs text-ink-faint -mt-1 mb-2">
+                <legend className="stencil text-content-muted mb-1">Leg fares</legend>
+                <p className="text-xs text-content-faint -mt-1 mb-2">
                   Enter fares in naira. They&rsquo;re stored as kobo.
                 </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
                   {selectedSchedRoute.stops.slice(0, -1).map((stop, index) => {
                     const nextStop = selectedSchedRoute.stops[index + 1];
                     return (
@@ -643,11 +861,12 @@ export const OperatorTab: React.FC = () => {
               Create schedule
             </Button>
           </form>
+          )}
 
           <div className="space-y-2">
-            <h4 className="stencil text-ink-muted">Configured schedules</h4>
+            <h4 className="stencil text-content-muted">Configured schedules</h4>
             {isLoadingData && schedules.length === 0 ? (
-              <p className="flex items-center gap-2 text-xs text-ink-muted py-3">
+              <p className="flex items-center gap-2 text-xs text-content-muted py-3">
                 <span
                   aria-hidden="true"
                   className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin shrink-0"
@@ -655,7 +874,7 @@ export const OperatorTab: React.FC = () => {
                 Loading schedules…
               </p>
             ) : schedules.length === 0 ? (
-              <p className="text-xs text-ink-muted py-3">No schedules yet. Create one above.</p>
+                <p className="text-xs text-content-muted py-3">No schedules yet. Create one above.</p>
             ) : (
               <ul className="ruled">
                 {schedules.map((s) => {
@@ -665,10 +884,10 @@ export const OperatorTab: React.FC = () => {
                   return (
                     <li key={s.id} className="py-3 space-y-1.5">
                       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                        <span className="board text-base text-ink">{formatDepartureTime(s.departureTimeOfDay)}</span>
-                        <span className="stencil text-ink-faint">Ref {shortRef(s.id)}</span>
+                        <span className="board text-base text-content">{formatDepartureTime(s.departureTimeOfDay)}</span>
+                        <span className="stencil text-content-faint">Ref {shortRef(s.id)}</span>
                       </div>
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted figures">
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-content-muted figures">
                         <span>Route {shortRef(s.routeId)}</span>
                         <span>Vehicle {shortRef(s.vehicleId)}</span>
                         <span>
@@ -695,11 +914,11 @@ export const OperatorTab: React.FC = () => {
           hidden={activeTab !== 'telemetry'}
         >
           <form onSubmit={handleSendTelemetryPing} className="stock p-4 space-y-4">
-            <h3 className="text-sm font-bold text-ink flex items-center gap-2">
+            <h3 className="text-sm font-bold text-content flex items-center gap-2">
               <Send className="w-4 h-4 text-signal" aria-hidden="true" />
               Simulate a driver GPS ping
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
               <Field label="Schedule" error={telemetryScheduleError}>
                 {(ids) => (
                   <select
@@ -742,7 +961,7 @@ export const OperatorTab: React.FC = () => {
                 )}
               </Field>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
               <Field label="Latitude" hint="-90 to 90." error={telemetryLatError}>
                 {(ids) => (
                   <input
@@ -781,6 +1000,77 @@ export const OperatorTab: React.FC = () => {
             </Button>
           </form>
         </div>
+
+        {/* Onboard Operator Management (Admin Only) */}
+        {isAdmin && (
+          <div
+            role="tabpanel"
+            id="operator-panel-operators"
+            aria-labelledby="operator-tab-operators"
+            tabIndex={0}
+            hidden={activeTab !== 'operators'}
+          >
+            <form onSubmit={handleProvisionOperator} className="stock p-4 space-y-4">
+              <h3 className="text-sm font-bold text-content flex items-center gap-2">
+                <UserPlus className="w-4 h-4 text-signal" aria-hidden="true" />
+                Onboard a new operator user
+              </h3>
+              <p className="text-xs text-content-muted">
+                Admin privilege required. Provisioned operators gain access to manage routes, vehicles, and schedules.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+                <Field label="Full name">
+                  {(ids) => (
+                    <input
+                      {...ids}
+                      type="text"
+                      required
+                      placeholder="e.g. Samuel Okafor"
+                      className={controlStyles}
+                      value={opFullName}
+                      onChange={(e) => setOpFullName(e.target.value)}
+                    />
+                  )}
+                </Field>
+                <Field label="Email address">
+                  {(ids) => (
+                    <input
+                      {...ids}
+                      type="email"
+                      required
+                      placeholder="operator@bitroute.com"
+                      className={controlStyles}
+                      value={opEmail}
+                      onChange={(e) => setOpEmail(e.target.value)}
+                    />
+                  )}
+                </Field>
+                <Field label="Initial password" hint="At least 8 characters.">
+                  {(ids) => (
+                    <input
+                      {...ids}
+                      type="password"
+                      required
+                      placeholder="••••••••"
+                      className={controlStyles}
+                      value={opPassword}
+                      onChange={(e) => setOpPassword(e.target.value)}
+                    />
+                  )}
+                </Field>
+              </div>
+              <Button
+                type="submit"
+                size="sm"
+                icon={<UserPlus className="w-3.5 h-3.5" aria-hidden="true" />}
+                isLoading={isProvisioningOp}
+                loadingLabel="Provisioning operator account"
+              >
+                Onboard operator
+              </Button>
+            </form>
+          </div>
+        )}
       </div>
     </Card>
   );

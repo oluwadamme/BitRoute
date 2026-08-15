@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { MapPin, Radio } from 'lucide-react';
+import { api } from '../services/api';
 import { telemetryService } from '../services/telemetry';
 import { TelemetryPayload } from '../types';
 import { formatTimeAgo } from '../lib/format';
@@ -55,6 +56,19 @@ export const TelemetryRadar: React.FC<TelemetryRadarProps> = ({ scheduleId, stop
   useEffect(() => {
     let cancelled = false;
     setTelemetry(null);
+
+    const loadInitialTelemetry = async () => {
+      try {
+        const initial = await api.getLatestTelemetry(scheduleId);
+        if (!cancelled && initial) {
+          setTelemetry(initial);
+        }
+      } catch {
+        // Degrade silently if no telemetry exists yet
+      }
+    };
+
+    void loadInitialTelemetry();
 
     // Reflects the real socket state over time (including drops and
     // reconnects), unlike a one-shot flag set after the first connect.
@@ -112,28 +126,28 @@ export const TelemetryRadar: React.FC<TelemetryRadarProps> = ({ scheduleId, stop
         <div className="flex items-center gap-2">
           <span
             aria-hidden="true"
-            className={`w-2 h-2 rounded-full shrink-0 ${isLive ? 'bg-stamp animate-tick' : 'bg-ink-faint'}`}
+            className={`w-2 h-2 rounded-full shrink-0 ${isLive ? 'bg-stamp animate-tick' : 'bg-content-faint'}`}
           />
-          <span className="stencil text-ink-muted">{isLive ? 'Live' : 'Not currently tracking'}</span>
+          <span className="stencil text-content-muted">{isLive ? 'Live' : 'Not currently tracking'}</span>
         </div>
       }
     >
       <div aria-live="polite">
         {telemetry ? (
-          <div className="flex items-start gap-3 bg-paper-sunk rounded-ticket border border-rule p-4">
+          <div className="flex items-start gap-3 bg-surface-sunk rounded-ticket border border-rule p-4">
             <MapPin className="w-4 h-4 mt-0.5 text-signal shrink-0" aria-hidden="true" />
             <div className="min-w-0">
-              <p className="board text-lg text-ink leading-snug">
+              <p className="board text-lg text-content leading-snug">
                 {describePosition(telemetry.currentLegIndex, stops)}
               </p>
-              <p className="mt-1 text-xs text-ink-muted">
+              <p className="mt-1 text-xs text-content-muted">
                 Updated {formatTimeAgo(telemetry.timestamp, now)}
               </p>
             </div>
           </div>
         ) : (
-          <div className="flex items-center gap-2 bg-paper-sunk rounded-ticket border border-rule p-4 text-xs text-ink-muted">
-            <MapPin className="w-4 h-4 text-ink-faint shrink-0" aria-hidden="true" />
+          <div className="flex items-center gap-2 bg-surface-sunk rounded-ticket border border-rule p-4 text-xs text-content-muted">
+            <MapPin className="w-4 h-4 text-content-faint shrink-0" aria-hidden="true" />
             <span>
               {isLive
                 ? 'Waiting for the next position update…'

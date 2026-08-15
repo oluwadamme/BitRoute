@@ -43,7 +43,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
     return (
       <div
         role="alert"
-        className="min-h-screen flex items-center justify-center p-6 bg-paper"
+        className="min-h-screen flex items-center justify-center p-6 bg-surface"
       >
         <div className="stock shadow-raised max-w-md w-full px-6 py-7 space-y-4">
           <div className="flex items-center gap-3 text-signal-deep">
@@ -51,7 +51,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
             <h1 className="board text-2xl font-bold">Something went wrong</h1>
           </div>
 
-          <p className="text-sm text-ink-muted leading-relaxed">
+          <p className="text-sm text-content-muted leading-relaxed">
             This page stopped working. Any seat you were holding is safe on our side,
             so try again or reload and pick up where you left off.
           </p>
@@ -62,21 +62,21 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
             <button
               type="button"
               onClick={this.handleReset}
-              className="px-4 py-2.5 text-sm font-semibold rounded-ticket bg-signal text-paper-raised border border-signal-deep hover:bg-signal-deep transition-colors"
+              className="px-4 py-2.5 text-sm font-semibold rounded-ticket bg-signal text-surface border border-signal-deep hover:bg-signal-deep transition-colors"
             >
               Try again
             </button>
             <button
               type="button"
               onClick={() => window.location.reload()}
-              className="px-4 py-2.5 text-sm font-semibold rounded-ticket bg-paper-raised text-ink border border-rule-strong hover:bg-paper-sunk transition-colors"
+              className="px-4 py-2.5 text-sm font-semibold rounded-ticket bg-surface-raised text-content border border-rule-strong hover:bg-surface-sunk transition-colors"
             >
               Reload the page
             </button>
           </div>
 
           {import.meta.env.DEV && (
-            <pre className="mt-2 p-3 bg-paper-sunk border border-rule rounded-ticket text-[11px] font-mono text-ink-muted overflow-x-auto whitespace-pre-wrap">
+            <pre className="mt-2 p-3 bg-surface-sunk border border-rule rounded-ticket text-[11px] font-mono text-content-muted overflow-x-auto whitespace-pre-wrap">
               {error.message}
             </pre>
           )}

@@ -17,30 +17,40 @@ transport booking SPA: React 19, TypeScript 5 (strict), Vite 6, Tailwind 3, axio
 Work in `frontend/`. The .NET backend is the backend-agent's territory.
 
 > **Source of truth is the code, not this file.** Where this document and the code
-> disagree, the code wins and this file needs updating. Verify variants and exports in
-> the named files rather than trusting the lists here.
+> disagree, the code wins, ask clarify questions, don't assume and this file needs updating. Verify variants and exports in
+> the named files rather than trusting the lists here. think critically in your implementation and don't be lazy.
 
 ---
 
-## 1. Aesthetic identity: printed transit ticket + enamel departure board
+## 1. Aesthetic identity: enamel departure board at night
 
-BitRoute sells *segments of a physical journey*, so the interface is ticket stock and
-wayfinding signage: ink on warm paper, ruled timetables, perforated stubs, condensed
-signage type. It is a **light, warm-paper theme with no dark mode** — do not add one.
+BitRoute sells *segments of a physical journey*, so the interface is transit signage and
+ticket stock: ruled timetables, perforated stubs, condensed signage type. It is a **dark
+theme and the only theme** — there is no light mode and no toggle; do not add one.
 
-This deliberately replaced a dark-slate glassmorphic dashboard. Never reintroduce it:
-no `bg-slate-*`, no `emerald`/`indigo`, no `backdrop-blur` panels, no glow shadows, no
-`rounded-xl`/`rounded-2xl`. Typing `slate` or `emerald` means you have made a mistake.
+The ground is a **warm charcoal, never a blue-grey and never pure black**. Blue-slate dark
+dashboards are the generic look this project exists to avoid. Never reintroduce the original
+build's treatment: no `bg-slate-*`, no `emerald`/`indigo`, no `backdrop-blur` panels, no glow
+shadows, no `rounded-xl`/`rounded-2xl`. Typing `slate` or `emerald` means you made a mistake.
 
 ### Tokens — defined in `tailwind.config.js`, authoritative there
 
-- Ground: `paper` `#F2EDE3` · `paper-raised` `#FBF8F2` · `paper-sunk` `#E7E0D2`
-- Text: `ink` `#16130E` · `ink-muted` `#5B5347` · `ink-faint` `#8C8371`
-- Lines: `rule` `#D6CDBC` · `rule-strong` `#BCB09A`
-- `signal` `#D6452B` (vermilion — the one hot accent, used sparingly) + `-deep` / `-wash`
-- `stamp` `#1F4E5F` (settled / confirmed) + `-deep` / `-wash`
-- `ochre` `#B57F1E` (pending, counting down) + `-deep` / `-wash`
-- Radius is `rounded-ticket` (3px) everywhere. Shadows: `shadow-stub`, `shadow-raised`, `shadow-press`.
+- Ground: `surface` `#15120E` · `surface-raised` `#1F1B15` · `surface-sunk` `#0D0B08`
+- Text: `content` `#F4EFE4` · `content-muted` `#B3A996` · `content-faint` `#8A8070`
+- Lines: `rule` `#332D24` (decorative hairlines) · `rule-strong` `#7E725F`
+  (**control boundaries** — clears WCAG 1.4.11 at 3.64:1; do not darken it)
+- `signal` `#FF6A45` (vermilion — the one hot accent, used sparingly) + `-deep` / `-wash`
+- `stamp` `#6FC3D6` (settled / confirmed) + `-deep` / `-wash`
+- `ochre` `#F0BC55` (pending, counting down) + `-deep` / `-wash`
+- Radius is `rounded-ticket` (3px) everywhere. Shadows: `shadow-stub`, `shadow-raised`,
+  `shadow-press` — on a dark ground depth reads as a lit top edge, not a drop shadow.
+
+**`paper` and `ink` no longer exist.** They were the light theme's names. Tailwind emits no
+CSS for an unknown class, so a stray `bg-paper` fails silently and renders unstyled rather
+than erroring. If something looks transparent, check for an old token first.
+
+A label sitting on `bg-signal` uses **`text-surface`** (measured 6.58:1), not
+`text-surface-raised`.
 
 ### Typography
 
@@ -75,6 +85,7 @@ it on a container that unmounts and remounts on data changes, or it replays on e
 |---|---|---|
 | `Card.tsx` | `Card` | `title`, `subtitle`, `action`, `emphasis`, `as`, `className` |
 | `Button.tsx` | `Button` | `variant: primary\|secondary\|danger\|ghost`, `size: sm\|md\|lg`, `isLoading`, `loadingLabel`, `icon` |
+| `IconButton.tsx` | `IconButton` | `label` (**required**, becomes the accessible name), `icon`, `variant: ghost\|bordered`, `inset` |
 | `Badge.tsx` | `Badge` | `variant: signal\|ochre\|stamp\|neutral`, `blink` |
 | `Modal.tsx` | `Modal` | `isOpen`, `onClose`, `title`, `titleText`, `maxWidth` |
 | `Field.tsx` | `Field`, `controlStyles` | render-prop that guarantees label association |
@@ -199,15 +210,26 @@ The app was rebuilt from zero `aria-*` attributes; do not regress it.
    notification live region.
 7. Focus is visible app-wide via a global `:focus-visible` ring. Do not remove it.
 
+### Fixed by the dark rebuild — keep them fixed
+
+- **Contrast.** Every palette pair is measured, not assumed. Body text clears 14.9:1 on
+  `surface-raised`; the primary button label clears 6.58:1; `rule-strong` clears 3.64:1 for
+  control boundaries. The light theme failed two of these. If you introduce a colour, measure it.
+- **Touch targets.** `Button` sizes all clear 44px (`min-h-11`), and `IconButton` is a fixed
+  44×44 box. Use those primitives rather than hand-rolling a padded icon.
+- **`cursor-pointer`.** Set explicitly on `Button` and `IconButton`. A native `<button>`
+  computes to `cursor: default`, so it must be asked for.
+
 ### Known outstanding gaps — real, unfixed, do not assume otherwise
 
-- Primary button label contrast is **4.17:1**, below the 4.5:1 AA threshold for normal text.
-- Touch targets are mostly **24–42px** against a 44×44 target.
-- `cursor-pointer` is absent on buttons — a native `<button>` computes to `cursor: default`.
-- Body copy is largely 12–14px against a 16px mobile minimum.
-- Input borders (`rule-strong` on `paper-raised`) are **2.02:1**, below the 3:1 that
-  WCAG 1.4.11 requires for control boundaries.
-- Only `z-50` is used; there is no z-index scale, and the sticky header and modal share it.
+- **Body copy is largely 12–14px** against a 16px mobile minimum. `.stencil` is 11px. This is
+  the largest remaining readability gap.
+- **No z-index scale.** Only `z-50` exists, and the sticky header and the modal share it —
+  correct stacking currently depends on DOM order alone.
+- **No line-length cap.** Nothing constrains body copy to the 65–75 character guidance.
+- **Nothing is verified in a browser.** All accessibility claims above come from code
+  inspection and computed contrast, not from axe, Lighthouse, a keyboard pass, or a screen
+  reader. Do not describe the app as WCAG-conformant on that basis.
 
 ---
 

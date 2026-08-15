@@ -34,7 +34,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("FrontendCors", policy =>
     {
-        policy.WithOrigins("http://localhost:3000", "http://localhost:80")
+        policy.WithOrigins("http://localhost:3001","http://localhost:3000", "http://localhost:80")
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
@@ -128,6 +128,7 @@ using (var scope = app.Services.CreateScope())
 // Idempotent: creates the Passenger/Operator/Admin role rows if missing.
 await app.Services.SeedIdentityRolesAsync();
 await app.Services.SeedAdminUserAsync(app.Configuration);
+await app.Services.SeedOperatorUserAsync(app.Configuration);
 await app.Services.SeedBookingDataAsync();
 
 // Configure the HTTP request pipeline. The exception middleware sits first so it

@@ -28,9 +28,10 @@ public sealed class PaystackService : IPaystackService
         string email,
         int amountInKobo,
         string reference,
-        string callbackUrl,
         CancellationToken cancellationToken = default)
     {
+        var callbackUrl = _options.CallbackUrl;
+
         // If testing with mock keys, return a mock authorization URL immediately
         if (_options.SecretKey.StartsWith("sk_test_mock"))
         {
@@ -57,8 +58,10 @@ public sealed class PaystackService : IPaystackService
         response.EnsureSuccessStatusCode();
 
         var result = await response.Content.ReadFromJsonAsync<PaystackInitApiResponse>(cancellationToken: cancellationToken);
-        if (result?.Status != true || result.Data is null)
+        _logger.LogInformation("Paystack transaction initialized: {Result}", result);
+        if (result is null || result?.Status != true || result.Data is null)
         {
+            _logger.LogError("Failed to initialize Paystack transaction.");
             throw new InvalidOperationException("Failed to initialize Paystack transaction.");
         }
 

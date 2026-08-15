@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Bus, KeyRound, UserCheck } from 'lucide-react';
-import { UserProfile } from '../types';
+import { UserProfile, UserRole } from '../types';
 import { Badge } from './ui/Badge';
+import { IconButton } from './ui/IconButton';
 import { describeCountdown, formatCountdown } from '../lib/format';
 
 type TabId = 'search' | 'my-bookings' | 'operator';
@@ -69,13 +70,18 @@ export const Header: React.FC<HeaderProps> = ({
   // sitting on a stale "00:00".
   const hasActiveHold = holdRemainingSeconds !== null && holdRemainingSeconds > 0;
 
+  const isOperatorUser = Boolean(
+    currentUser?.roles?.some((r) => r === UserRole.Admin || r === UserRole.Operator)
+  );
+  const visibleTabs = TABS.filter((tab) => tab.id !== 'operator' || isOperatorUser);
+
   const focusTab = (id: TabId) => tabRefs.current[id]?.focus();
 
   const handleTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
     event.preventDefault();
     const direction = event.key === 'ArrowRight' ? 1 : -1;
-    const next = TABS[(index + direction + TABS.length) % TABS.length];
+    const next = visibleTabs[(index + direction + visibleTabs.length) % visibleTabs.length];
     onTabChange(next.id);
     focusTab(next.id);
   };
@@ -97,27 +103,28 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Brand */}
         <div className="flex w-full items-center justify-between gap-3 md:w-auto md:justify-start">
           <div className="flex items-center gap-3">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-ticket bg-signal text-paper-raised">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-ticket bg-signal text-surface">
               <Bus className="h-6 w-6" aria-hidden="true" />
             </span>
             <div>
-              <p className="board text-2xl text-ink">BitRoute</p>
-              <p className="text-xs text-ink-muted">Intercity bus seats, booked ahead</p>
+              <p className="board text-2xl text-content">BitRoute</p>
+              <p className="text-xs text-content-muted">Intercity bus seats, booked ahead</p>
             </div>
           </div>
 
-          <button
-            type="button"
+          <IconButton
+            label={authLabel}
+            variant="bordered"
             onClick={onOpenAuth}
-            aria-label={authLabel}
-            className="flex h-10 w-10 items-center justify-center rounded-ticket border border-rule-strong bg-paper-raised text-ink-muted transition-colors hover:bg-paper-sunk hover:text-ink md:hidden"
-          >
-            {currentUser ? (
-              <UserCheck className="h-5 w-5 text-stamp" aria-hidden="true" />
-            ) : (
-              <KeyRound className="h-5 w-5" aria-hidden="true" />
-            )}
-          </button>
+            className="md:hidden"
+            icon={
+              currentUser ? (
+                <UserCheck className="h-5 w-5 text-stamp" />
+              ) : (
+                <KeyRound className="h-5 w-5" />
+              )
+            }
+          />
         </div>
 
         {/* Active hold, mobile: full width so it can't be missed while paying */}
@@ -127,9 +134,9 @@ export const Header: React.FC<HeaderProps> = ({
         <div
           role="tablist"
           aria-label="Main sections"
-          className="flex items-center gap-1 self-start rounded-ticket border border-rule bg-paper-sunk p-1.5 md:self-auto"
+          className="flex items-center gap-1 self-start rounded-ticket border border-rule bg-surface-sunk p-1.5 md:self-auto"
         >
-          {TABS.map((tab, index) => {
+          {visibleTabs.map((tab, index) => {
             const isActive = activeTab === tab.id;
             return (
               <button
@@ -147,7 +154,7 @@ export const Header: React.FC<HeaderProps> = ({
                 onKeyDown={(event) => handleTabKeyDown(event, index)}
                 className={[
                   'rounded-ticket px-3.5 py-2 text-xs font-bold uppercase tracking-signage transition-colors',
-                  isActive ? 'bg-signal text-paper-raised' : 'text-ink-muted hover:text-ink',
+                  isActive ? 'bg-signal text-surface' : 'text-content-muted hover:text-content',
                 ].join(' ')}
               >
                 {tab.label}
@@ -163,7 +170,7 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             type="button"
             onClick={onOpenAuth}
-            className="flex items-center gap-2 rounded-ticket border border-rule-strong bg-paper-raised px-3.5 py-2 text-xs font-semibold text-ink transition-colors hover:bg-paper-sunk"
+            className="flex items-center gap-2 rounded-ticket border border-rule-strong bg-surface-raised px-3.5 py-2 text-xs font-semibold text-content transition-colors hover:bg-surface-sunk"
           >
             {currentUser ? (
               <>
@@ -174,7 +181,7 @@ export const Header: React.FC<HeaderProps> = ({
               </>
             ) : (
               <>
-                <KeyRound className="h-4 w-4 text-ink-muted" aria-hidden="true" />
+                <KeyRound className="h-4 w-4 text-content-muted" aria-hidden="true" />
                 <span>Sign in</span>
               </>
             )}

@@ -10,6 +10,7 @@ import {
   RouteDto,
   ScheduleAvailabilityResponse,
   ScheduleDto,
+  TelemetryPayload,
   UserProfile,
   VehicleDto,
 } from '../types';
@@ -44,6 +45,11 @@ apiClient.interceptors.request.use((config) => {
   if (accessToken) {
     config.headers.Authorization = `Bearer ${accessToken}`;
   }
+  const method = config.method?.toUpperCase() || 'GET';
+  console.warn(`[API Request] ${method} ${config.baseURL || ''}${config.url || ''}`, {
+    params: config.params,
+    data: config.data,
+  });
   return config;
 });
 
@@ -90,17 +96,37 @@ const refreshAccessToken = (): Promise<string | null> => {
   return refreshInFlight;
 };
 
-// Automatic token refresh interceptor on 401
+// Automatic token refresh interceptor on 401 with request logging
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const method = response.config.method?.toUpperCase() || 'GET';
+    console.warn(`[API Response ${response.status}] ${method} ${response.config.url}`, response.data);
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
 
     // A cancelled request is an intentional abort, never an auth failure.
-    if (axios.isCancel(error)) return Promise.reject(error);
+    if (axios.isCancel(error)) {
+      console.warn(`[API Aborted] ${originalRequest?.method?.toUpperCase() || 'GET'} ${originalRequest?.url}`);
+      return Promise.reject(error);
+    }
+
+    if (error.response) {
+      console.error(
+        `[API Error ${error.response.status}] ${originalRequest?.method?.toUpperCase() || 'GET'} ${originalRequest?.url}`,
+        error.response.data
+      );
+    } else {
+      console.error(
+        `[API Network Error] ${originalRequest?.method?.toUpperCase() || 'GET'} ${originalRequest?.url}`,
+        error.message
+      );
+    }
 
     if (error.response?.status === 401 && originalRequest && !originalRequest._retry && refreshToken) {
       originalRequest._retry = true;
+      console.warn(`[API Auth] 401 Unauthorized — attempting refresh for ${originalRequest.url}`);
 
       const newAccessToken = await refreshAccessToken();
       if (newAccessToken) {
@@ -231,8 +257,16 @@ export const api = {
     return res.data.data!;
   },
 
+  getLatestTelemetry: async (id: string, signal?: AbortSignal): Promise<TelemetryPayload | null> => {
+    const res = await apiClient.get<ApiResponse<TelemetryPayload>>(`/schedules/${id}/telemetry/latest`, {
+      signal,
+    });
+    return res.data.data || null;
+  },
+
   // 5. Bookings Endpoints
   holdSeat: async (payload: {
+    passengerId: string;
     scheduleId: string;
     travelDate: string;
     seatId: string;
@@ -248,25 +282,33 @@ export const api = {
     await apiClient.post(`/bookings/${bookingId}/confirm`);
   },
 
-  initializePaystackPayment: async (bookingId: string): Promise<PaystackInitializeResponse> => {
+  initializePaystackPayment: async (bookingId: string, email: string): Promise<PaystackInitializeResponse> => {
     const res = await apiClient.post<ApiResponse<PaystackInitializeResponse>>(
-      `/bookings/${bookingId}/pay`
+      `/bookings/${bookingId}/pay`,
+      { email }
     );
     return res.data.data!;
   },
 
-  getBooking: async (bookingId: string): Promise<BookingDto> => {
-    const res = await apiClient.get<ApiResponse<BookingDto>>(`/bookings/${bookingId}`);
+  getBooking: async (bookingId: string, userId: string, userRole: string): Promise<BookingDto> => {
+    const res = await apiClient.get<ApiResponse<BookingDto>>(`/bookings/${bookingId}`, {
+      params: { userId, userRole },
+    });
     return res.data.data!;
   },
 
-  getMyBookings: async (signal?: AbortSignal): Promise<BookingDto[]> => {
-    const res = await apiClient.get<ApiResponse<BookingDto[]>>('/bookings/me', { signal });
+  getMyBookings: async (passengerId: string, signal?: AbortSignal): Promise<BookingDto[]> => {
+    const res = await apiClient.get<ApiResponse<BookingDto[]>>('/bookings/me', {
+      params: { passengerId },
+      signal,
+    });
     return res.data.data || [];
   },
 
-  cancelBooking: async (bookingId: string): Promise<void> => {
-    await apiClient.delete(`/bookings/${bookingId}`);
+  cancelBooking: async (bookingId: string, userId: string, userRole: string): Promise<void> => {
+    await apiClient.delete(`/bookings/${bookingId}`, {
+      params: { userId, userRole },
+    });
   },
 };
 

@@ -1,6 +1,8 @@
 using BitRoute.Domain.Entities;
 using BitRoute.Domain.Exceptions;
+using BitRoute.Infrastructure.Caching;
 using BitRoute.Infrastructure.Identity;
+using Microsoft.Extensions.Logging.Abstractions;
 using StackExchange.Redis;
 using Testcontainers.Redis;
 
@@ -18,7 +20,7 @@ public sealed class RedisRefreshTokenStoreTests : IAsyncLifetime
     {
         await _container.StartAsync();
         _redis = await ConnectionMultiplexer.ConnectAsync(_container.GetConnectionString());
-        _store = new RedisRefreshTokenStore(_redis, TimeProvider.System);
+        _store = new RedisRefreshTokenStore(new RedisCacheService(_redis, NullLogger<RedisCacheService>.Instance), TimeProvider.System);
     }
 
     public async Task DisposeAsync()

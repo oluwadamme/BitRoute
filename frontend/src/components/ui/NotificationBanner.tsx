@@ -1,5 +1,6 @@
 import React from 'react';
 import { AlertTriangle, CheckCircle2, X } from 'lucide-react';
+import { IconButton } from './IconButton';
 
 export interface Notification {
   message: string;
@@ -14,10 +15,11 @@ interface NotificationBannerProps {
 /**
  * Status strip.
  *
- * The live region wrapper is always mounted, even with nothing to show.
- * Assistive technology only announces changes inside a region that already
- * existed; mounting the region and its message in the same tick, as the
- * previous version did, means errors were never announced at all.
+ * The live-region wrapper is ALWAYS mounted, even with nothing to show — that
+ * is why the `sr-only` branch below looks like dead markup. It is not: assistive
+ * technology only announces changes inside a region that already existed, so
+ * mounting the region and its message in the same tick means the message is
+ * never announced at all. Do not collapse this to `{notification && ...}`.
  */
 export const NotificationBanner: React.FC<NotificationBannerProps> = ({
   notification,
@@ -37,8 +39,8 @@ export const NotificationBanner: React.FC<NotificationBannerProps> = ({
           className={[
             'flex items-start justify-between gap-4 px-4 py-3 rounded-ticket border animate-roll-in',
             isError
-              ? 'bg-signal-wash border-signal/40 text-signal-deep'
-              : 'bg-stamp-wash border-stamp/35 text-stamp-deep',
+              ? 'bg-signal-wash border-signal/60 text-signal-deep'
+              : 'bg-stamp-wash border-stamp/55 text-stamp-deep',
           ].join(' ')}
         >
           <div className="flex items-start gap-3 min-w-0">
@@ -50,14 +52,12 @@ export const NotificationBanner: React.FC<NotificationBannerProps> = ({
             <p className="text-sm leading-snug">{notification.message}</p>
           </div>
 
-          <button
-            type="button"
+          <IconButton
+            label="Dismiss message"
+            inset
             onClick={onDismiss}
-            aria-label="Dismiss message"
-            className="shrink-0 p-1 -m-1 rounded-ticket opacity-70 hover:opacity-100 transition-opacity"
-          >
-            <X className="w-4 h-4" aria-hidden="true" />
-          </button>
+            icon={<X className="w-4 h-4" />}
+          />
         </div>
       )}
     </div>

@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.JsonWebTokens;
+using System.Security.Claims;
 
 namespace BitRoute.Api.Controllers;
 
@@ -68,7 +69,7 @@ public sealed class AuthController : ControllerBase
         new
         {
             Id = User.Identity!.Name,
-            Email = User.FindFirst(JwtRegisteredClaimNames.Email)?.Value,
+            Email = User.FindFirst(JwtRegisteredClaimNames.Email)?.Value ?? User.FindFirst(ClaimTypes.Email)?.Value,
             Roles = User.FindAll("role").Select(c => c.Value),
         },
         "Authenticated."));

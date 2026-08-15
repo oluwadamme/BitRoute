@@ -12,48 +12,51 @@ export default {
         mono: ['"IBM Plex Mono"', 'ui-monospace', 'Menlo', 'monospace'],
       },
       colors: {
-        // Warm newsprint ground, never pure white.
-        paper: {
-          DEFAULT: '#F2EDE3',
-          raised: '#FBF8F2',
-          sunk: '#E7E0D2',
+
+        surface: {
+          DEFAULT: '#15120E',
+          raised: '#1F1B15',
+          sunk: '#0D0B08',
         },
-        ink: {
-          DEFAULT: '#16130E',
-          muted: '#5B5347',
-          faint: '#8C8371',
+        content: {
+          DEFAULT: '#F4EFE4',
+          muted: '#B3A996',
+          faint: '#8A8070',
         },
         rule: {
-          DEFAULT: '#D6CDBC',
-          strong: '#BCB09A',
+          // Decorative hairlines and dividers; carries no state, so no 3:1 duty.
+          DEFAULT: '#332D24',
+          // Boundaries of real controls. Must stay >= 3:1 against surface-raised.
+          strong: '#7E725F',
         },
-        // Signage vermilion. The single hot accent, used sparingly.
+        // Signage vermilion, lifted to glow on a dark ground. The one hot accent.
         signal: {
-          DEFAULT: '#D6452B',
-          deep: '#A82F1B',
-          wash: '#FBE7E2',
+          DEFAULT: '#FF6A45',
+          deep: '#FF8A6B',
+          wash: '#2E1810',
         },
-        // Deep ink-teal for settled, confirmed states.
+        // Cold enamel blue for settled, confirmed states.
         stamp: {
-          DEFAULT: '#1F4E5F',
-          deep: '#143743',
-          wash: '#E1ECEF',
+          DEFAULT: '#6FC3D6',
+          deep: '#8FD4E3',
+          wash: '#10262C',
         },
-        // Ochre for pending holds and anything on a countdown.
+        // Lamp amber for pending holds and anything on a countdown.
         ochre: {
-          DEFAULT: '#B57F1E',
-          deep: '#8A5F13',
-          wash: '#F7EEDA',
+          DEFAULT: '#F0BC55',
+          deep: '#F7CF7E',
+          wash: '#2B2010',
         },
       },
       borderRadius: {
         ticket: '3px',
       },
       boxShadow: {
-        // Printed stock sits on the page, it does not float above it.
-        stub: '0 1px 0 0 #D6CDBC, 0 2px 0 0 rgba(22, 19, 14, 0.04)',
-        raised: '0 2px 0 0 #D6CDBC, 0 6px 16px -8px rgba(22, 19, 14, 0.28)',
-        press: 'inset 0 2px 0 0 rgba(22, 19, 14, 0.10)',
+        // On a dark ground, depth reads as a lit top edge rather than a drop shadow.
+        stub: 'inset 0 1px 0 0 rgba(244, 239, 228, 0.05)',
+        raised:
+          'inset 0 1px 0 0 rgba(244, 239, 228, 0.07), 0 12px 28px -12px rgba(0, 0, 0, 0.85)',
+        press: 'inset 0 2px 0 0 rgba(0, 0, 0, 0.35)',
       },
       letterSpacing: {
         signage: '0.02em',
@@ -68,7 +71,7 @@ export default {
           '0%': { opacity: '0', transform: 'translateY(-0.35em)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
-        'tick': {
+        tick: {
           '0%, 100%': { opacity: '1' },
           '50%': { opacity: '0.25' },
         },
@@ -77,7 +80,7 @@ export default {
         'stub-in': 'stub-in 420ms cubic-bezier(0.2, 0.7, 0.3, 1) both',
         'roll-in': 'roll-in 300ms cubic-bezier(0.2, 0.7, 0.3, 1) both',
         // Departure-board blink. One second, not a perpetual pulse.
-        'tick': 'tick 1.1s steps(1, end) infinite',
+        tick: 'tick 1.1s steps(1, end) infinite',
       },
     },
   },

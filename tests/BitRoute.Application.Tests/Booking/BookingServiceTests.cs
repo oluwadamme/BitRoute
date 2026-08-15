@@ -4,6 +4,7 @@ using BitRoute.Domain.Entities;
 using BitRoute.Domain.Enums;
 using BitRoute.Domain.Exceptions;
 using BitRoute.Domain.Interfaces;
+using BitRoute.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Xunit;
@@ -35,8 +36,20 @@ public class BookingServiceTests
     public BookingServiceTests()
     {
         _route = Route.Create("Lagos to Ibadan", new[] { "Lagos", "Shagamu", "Ibadan" });
-        _vehicle = Vehicle.Create("Van 1", new[] { "S1", "S2" });
-        
+
+        // A 2+1 van: columns 1 and 2 on the left, column 3 is the aisle, column 4 on the right.
+        // Only the two left-hand seats of row 1 are populated, which is exactly the kind of gap
+        // an int column is there to express.
+        _vehicle = Vehicle.Create(
+            "Van 1",
+            new VehicleLayout(rowCount: 1, seatsPerRow: 4, aisleAfterColumn: 2),
+            new[]
+            {
+                new SeatPlacement("S1", 1, 1),
+                new SeatPlacement("S2", 1, 2)
+            });
+
+
         _seat1 = _vehicle.Seats.First(s => s.Number == "S1");
         _seat2 = _vehicle.Seats.First(s => s.Number == "S2");
 
@@ -77,6 +90,9 @@ public class BookingServiceTests
         _scheduleRepositoryMock.Setup(r => r.GetByIdAsync(_schedule.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(_schedule);
 
+        _vehicleRepositoryMock.Setup(r => r.GetLayoutAsync(_vehicle.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(_vehicle.Layout);
+
         _vehicleRepositoryMock.Setup(r => r.GetSeatsByVehicleIdAsync(_vehicle.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new[] { _seat1, _seat2 });
 
@@ -102,11 +118,70 @@ public class BookingServiceTests
     }
 
     [Fact]
+    public async Task GetScheduleAvailability_ReturnsSeatPositionsAndVehicleLayout()
+    {
+        var travelDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
+
+        _scheduleRepositoryMock.Setup(r => r.GetByIdAsync(_schedule.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(_schedule);
+
+        _vehicleRepositoryMock.Setup(r => r.GetLayoutAsync(_vehicle.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(_vehicle.Layout);
+
+        _vehicleRepositoryMock.Setup(r => r.GetSeatsByVehicleIdAsync(_vehicle.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { _seat1, _seat2 });
+
+        _bookingRepositoryMock.Setup(r => r.GetActiveBookingsAsync(_schedule.Id, travelDate, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Array.Empty<SeatBooking>());
+
+        var response = await _service.GetScheduleAvailabilityAsync(_schedule.Id, travelDate, 0, 2);
+
+        // The cabin shape lets a client draw the aisle at column 3 without guessing.
+        Assert.Equal(new VehicleLayoutDto(1, 4, 2), response.Data!.Layout);
+
+        var s1 = response.Data.Seats.First(s => s.SeatId == _seat1.Id);
+        Assert.Equal(1, s1.Row);
+        Assert.Equal(1, s1.Column);
+
+        var s2 = response.Data.Seats.First(s => s.SeatId == _seat2.Id);
+        Assert.Equal(1, s2.Row);
+        Assert.Equal(2, s2.Column);
+    }
+
+    [Fact]
+    public async Task CreateVehicle_SeatsSharingAPosition_IsRejected()
+    {
+        var request = new CreateVehicleRequest(
+            "Broken Coach", 1, 5, 2,
+            new List<CreateSeatDto>
+            {
+                new("1A", 1, 1),
+                new("1B", 1, 1)
+            });
+
+        await Assert.ThrowsAsync<ArgumentException>(() => _service.CreateVehicleAsync(request));
+    }
+
+    [Fact]
+    public async Task CreateVehicle_SeatOnTheAisleColumn_IsRejected()
+    {
+        var request = new CreateVehicleRequest(
+            "Broken Coach", 1, 5, 2,
+            new List<CreateSeatDto>
+            {
+                new("1A", 1, 1),
+                new("1B", 1, 3) // column 3 is the aisle
+            });
+
+        await Assert.ThrowsAsync<ArgumentException>(() => _service.CreateVehicleAsync(request));
+    }
+
+    [Fact]
     public async Task HoldSeat_NonOverlappingSegments_Succeeds()
     {
         var travelDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
         var passengerId = Guid.NewGuid();
-        var request = new HoldSeatRequest(_schedule.Id, travelDate, _seat1.Id, 0, 1, "idempotency-1");
+        var request = new HoldSeatRequest(passengerId, _schedule.Id, travelDate, _seat1.Id, 0, 1, "idempotency-1");
 
         _scheduleRepositoryMock.Setup(r => r.GetByIdAsync(_schedule.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(_schedule);
@@ -129,7 +204,7 @@ public class BookingServiceTests
     public async Task HoldSeat_OverlappingSegment_ThrowsSeatUnavailableException()
     {
         var travelDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
-        var request = new HoldSeatRequest(_schedule.Id, travelDate, _seat1.Id, 1, 2, "key2");
+        var request = new HoldSeatRequest(Guid.NewGuid(), _schedule.Id, travelDate, _seat1.Id, 1, 2, "key2");
 
         _scheduleRepositoryMock.Setup(r => r.GetByIdAsync(_schedule.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(_schedule);
@@ -149,7 +224,7 @@ public class BookingServiceTests
     {
         var travelDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
         var passengerId = Guid.NewGuid();
-        var request = new HoldSeatRequest(_schedule.Id, travelDate, _seat1.Id, 0, 2, "idempotency-key");
+        var request = new HoldSeatRequest(passengerId, _schedule.Id, travelDate, _seat1.Id, 0, 2, "idempotency-key");
 
         var existingHold = SeatBooking.CreateHeld(
             passengerId, _schedule.Id, travelDate, _seat1.Id, 0, 2, 2200, "idempotency-key");

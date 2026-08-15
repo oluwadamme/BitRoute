@@ -39,21 +39,30 @@ export const Field: React.FC<FieldProps> = ({
 
   return (
     <div className={className}>
-      <label htmlFor={id} className="block stencil text-ink-muted mb-1.5">
+      <label htmlFor={id} className="block stencil text-content-muted mb-1.5">
         {label}
       </label>
-
-      {hint && (
-        <p id={hintId} className="text-xs text-ink-faint mb-1.5 leading-snug">
-          {hint}
-        </p>
-      )}
 
       {children({
         id,
         'aria-describedby': describedBy || undefined,
         'aria-invalid': error ? true : undefined,
       })}
+
+      {/*
+        The hint sits BELOW the control, not between the label and it.
+        Above the control, a hinted field pushes its input down by the hint's
+        height, so in any side-by-side grid it stops lining up with an unhinted
+        neighbour — which it did in four places on the operator console. Below
+        the control, every label and every input aligns regardless of which
+        fields carry hints. `aria-describedby` is unaffected by DOM order, so
+        the control is still described by both hint and error.
+      */}
+      {hint && (
+        <p id={hintId} className="mt-1.5 text-xs text-content-muted leading-snug">
+          {hint}
+        </p>
+      )}
 
       {error && (
         <p id={errorId} className="mt-1.5 text-xs text-signal-deep leading-snug">
@@ -66,4 +75,4 @@ export const Field: React.FC<FieldProps> = ({
 
 /** Shared input styling so every control on the page reads as the same stock. */
 export const controlStyles =
-  'w-full bg-paper-raised border border-rule-strong rounded-ticket px-3 py-2.5 text-sm text-ink placeholder:text-ink-faint transition-colors hover:border-ink-faint focus:border-signal';
+  'w-full bg-surface-raised border border-rule-strong rounded-ticket px-3 py-2.5 text-sm text-content placeholder:text-content-faint transition-colors hover:border-content-faint focus:border-signal';

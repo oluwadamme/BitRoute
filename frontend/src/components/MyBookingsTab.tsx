@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Clock, CreditCard, Trash2 } from 'lucide-react';
 import { api, isAbortError, toErrorMessage } from '../services/api';
-import { BookingDto } from '../types';
+import { BookingDto, UserProfile } from '../types';
 import { Card } from './ui/Card';
 import { Button } from './ui/Button';
 import { Badge } from './ui/Badge';
@@ -11,12 +11,12 @@ import {
   bookingStatusLabel,
   formatCountdown,
   formatFare,
-  formatSegment,
   formatTravelDate,
   shortRef,
 } from '../lib/format';
 
 interface MyBookingsTabProps {
+  currentUser: UserProfile | null;
   onPayBooking: (booking: BookingDto) => void;
 }
 
@@ -46,7 +46,24 @@ const sortBookings = (bookings: BookingDto[]): BookingDto[] =>
 const secondsUntil = (isoTime: string, now: number): number =>
   Math.max(0, Math.floor((new Date(isoTime).getTime() - now) / 1000));
 
-export const MyBookingsTab: React.FC<MyBookingsTabProps> = ({ onPayBooking }) => {
+/**
+ * Plain-language length of the journey.
+ *
+ * `BookingDto` carries stop *indices* and nothing else — no stop names, no
+ * route — so "Stop 0 → Stop 2 · segment [0, 2)" was the only thing there was
+ * data for, and all of it is engineer vocabulary at someone who just wants to
+ * know which seat they bought. How many stops they ride is the one thing those
+ * two numbers say that a passenger can actually use. When the DTO gains stop
+ * names this becomes the real "Lagos → Ibadan".
+ */
+const describeJourneyLength = (boardingIndex: number, alightingIndex: number): string => {
+  // A valid booking always spans at least one stop; clamping means malformed
+  // data can never render "0 stops".
+  const stops = Math.max(1, alightingIndex - boardingIndex);
+  return `${stops} stop${stops === 1 ? '' : 's'}`;
+};
+
+export const MyBookingsTab: React.FC<MyBookingsTabProps> = ({ currentUser, onPayBooking }) => {
   const [bookings, setBookings] = useState<BookingDto[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [notification, setNotification] = useState<Notification | null>(null);
@@ -57,6 +74,7 @@ export const MyBookingsTab: React.FC<MyBookingsTabProps> = ({ onPayBooking }) =>
   const abortRef = useRef<AbortController | null>(null);
 
   const loadBookings = useCallback(async () => {
+    if (!currentUser) return;
     // A stale in-flight request must never win a race against a fresher one.
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -64,7 +82,7 @@ export const MyBookingsTab: React.FC<MyBookingsTabProps> = ({ onPayBooking }) =>
 
     setIsLoading(true);
     try {
-      const data = await api.getMyBookings(controller.signal);
+      const data = await api.getMyBookings(currentUser.id, controller.signal);
       setBookings(data);
     } catch (err: unknown) {
       if (isAbortError(err)) return;
@@ -76,7 +94,7 @@ export const MyBookingsTab: React.FC<MyBookingsTabProps> = ({ onPayBooking }) =>
     } finally {
       if (!controller.signal.aborted) setIsLoading(false);
     }
-  }, []);
+  }, [currentUser]);
 
   useEffect(() => {
     loadBookings();
@@ -107,7 +125,7 @@ export const MyBookingsTab: React.FC<MyBookingsTabProps> = ({ onPayBooking }) =>
     if (!cancelTarget) return;
     setIsCancelling(true);
     try {
-      await api.cancelBooking(cancelTarget.id);
+      await api.cancelBooking(cancelTarget.id, currentUser?.id ?? '', currentUser?.roles?.[0] ?? '');
       setNotification({
         type: 'success',
         message: `Booking ${shortRef(cancelTarget.id)} is cancelled. Your seat is back on sale.`,
@@ -146,9 +164,9 @@ export const MyBookingsTab: React.FC<MyBookingsTabProps> = ({ onPayBooking }) =>
 
           <div aria-busy={isLoading || undefined}>
             {isLoading && bookings.length === 0 ? (
-              <p className="py-10 text-center text-sm text-ink-muted">Loading your bookings&hellip;</p>
+              <p className="py-10 text-center text-sm text-content-muted">Loading your bookings&hellip;</p>
             ) : sortedBookings.length === 0 ? (
-              <p className="py-10 text-center text-sm text-ink-muted">
+              <p className="py-10 text-center text-sm text-content-muted">
                 You haven't booked a seat yet. Search for a departure to get started.
               </p>
             ) : (
@@ -165,7 +183,7 @@ export const MyBookingsTab: React.FC<MyBookingsTabProps> = ({ onPayBooking }) =>
                         <div className="flex flex-wrap items-start justify-between gap-4">
                           <div className="space-y-1.5 min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
-                              <span className="figures text-xs text-ink-faint">
+                              <span className="figures text-xs text-content-faint">
                                 Ref {shortRef(booking.id)}
                               </span>
                               <Badge
@@ -175,14 +193,11 @@ export const MyBookingsTab: React.FC<MyBookingsTabProps> = ({ onPayBooking }) =>
                                 {bookingStatusLabel(booking.status)}
                               </Badge>
                             </div>
-                            <p className="board text-lg text-ink">{formatTravelDate(booking.travelDate)}</p>
-                            <p className="text-xs text-ink-muted">
-                              <span className="figures">
-                                Stop {booking.boardingIndex} &rarr; Stop {booking.alightingIndex}
-                              </span>
-                              {' · segment '}
-                              <span className="figures">
-                                {formatSegment(booking.boardingIndex, booking.alightingIndex)}
+                            <p className="board text-lg text-content">{formatTravelDate(booking.travelDate)}</p>
+                            <p className="text-xs text-content-muted">
+                              <span>
+                                {describeJourneyLength(booking.boardingIndex, booking.alightingIndex)}{' '}
+                                along the route
                               </span>
                               {' · '}
                               <span className="figures">{formatFare(booking.price, true)}</span>
@@ -238,12 +253,11 @@ export const MyBookingsTab: React.FC<MyBookingsTabProps> = ({ onPayBooking }) =>
       >
         {cancelTarget && (
           <div className="space-y-4">
-            <p className="text-sm text-ink">
+            <p className="text-sm text-content">
               This releases your seat on{' '}
-              <strong>{formatTravelDate(cancelTarget.travelDate)}</strong>, Stop{' '}
-              {cancelTarget.boardingIndex} &rarr; Stop {cancelTarget.alightingIndex}, segment{' '}
-              <strong className="figures">
-                {formatSegment(cancelTarget.boardingIndex, cancelTarget.alightingIndex)}
+              <strong>{formatTravelDate(cancelTarget.travelDate)}</strong>, a journey of{' '}
+              <strong>
+                {describeJourneyLength(cancelTarget.boardingIndex, cancelTarget.alightingIndex)}
               </strong>{' '}
               (fare <strong className="figures">{formatFare(cancelTarget.price, true)}</strong>). Once
               you cancel, that seat goes back on sale and you can't undo this.
