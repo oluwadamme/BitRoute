@@ -319,17 +319,17 @@ Built as a series of phases, each shippable on its own. Build a thin vertical sl
   - [x] Gateway resilience via `Microsoft.Extensions.Http.Resilience` (3 retries with exponential backoff, circuit breaker, 10s timeouts).
   - [x] Docker Compose multi-container stack (`postgres`, `redis`, `api`, `web`) with healthcheck dependency ordering.
 
-## What this project demonstrates
+## What this project demonstrates & Technical Defense Guides
 
-For anyone reviewing this as a portfolio piece, look here first:
+For anyone reviewing this as a portfolio piece or preparing to defend these architectural concepts in technical interviews, detailed deep-dive guides—including 12-year-old analogies, trade-off analyses, production code snippets, and Mermaid flowcharts—are available in the `docs/` folder:
 
-1. **Concurrency-correct segment inventory**, defended by both Serializable transactions and a PostgreSQL exclusion constraint, proven by passing parallel-booking concurrency tests.
-2. **Asynchronous, signature-verified Paystack payments** decoupled through MediatR, with constant-time HMAC-SHA512 verification, idempotent webhooks, and correct minor-unit money handling.
-3. **The reserve-then-confirm hold pattern**, featuring an automatic `ExpiredHoldSweeper` background service and production Outbox pattern.
-4. **Real-time telemetry and fleet analytics**, combining SignalR WebSocket streaming, historical breadcrumbs, and leg-by-leg departure occupancy tracking.
-5. **Production defense-in-depth**, featuring ASP.NET Core rate limiting policies, HTTP resilience handlers, Redis token rotation, and multi-container Docker Compose orchestration.
+1. **[Concurrency-Correct Segment Inventory](docs/01-concurrency-correct-segment-inventory.md)**: Defended by both Serializable transactions with exponential backoff retries and a PostgreSQL `btree_gist` exclusion constraint.
+2. **[Asynchronous Signature-Verified Paystack Webhook Settlement](docs/02-asynchronous-paystack-webhook-settlement.md)**: Decoupled through MediatR, with constant-time HMAC-SHA512 `FixedTimeEquals` signature verification, idempotent deduplication, and minor-unit (kobo) money handling.
+3. **[Reserve-Then-Confirm Hold & Production Outbox Pattern](docs/03-reserve-then-confirm-hold-and-outbox-pattern.md)**: Featuring an automatic `ExpiredHoldSweeper` background worker, transactional outbox staging, exponential backoff retries, and dead-lettering.
+4. **[Real-Time Telemetry & Fleet Analytics](docs/04-realtime-telemetry-and-fleet-analytics.md)**: Combining SignalR WebSocket streaming, historical breadcrumbs (`VehicleTelemetryLog`), and leg-by-leg departure occupancy calculations over segment intervals `[BoardingIndex, AlightingIndex)`.
+5. **[Production Defense-in-Depth & System Resilience](docs/05-production-defense-in-depth-and-resilience.md)**: Featuring ASP.NET Core rate limiting policies with custom 429 JSON error envelopes, `Microsoft.Extensions.Http.Resilience` handlers, Redis sliding refresh-token rotation with reuse detection, and multi-container Docker Compose orchestration.
 
-These are real backend concerns rather than CRUD, and each one is the kind of thing that comes up in interviews for senior .NET roles.
+These represent production backend concerns beyond standard CRUD, designed to demonstrate enterprise architecture principles in senior .NET software engineering interviews.
 
 ---
 
