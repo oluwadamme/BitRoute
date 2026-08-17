@@ -133,38 +133,38 @@ ASP.NET Core SignalR over WebSockets opens persistent duplex channels that strea
 
 ```mermaid
 flowchart TD
-    subgraph Client["Client Layer"]
-        SPA["React 19 Vite SPA: Enamel Dark Design System"] -->|REST API over Axios| GW["Nginx Reverse Proxy / Port 3001"]
-        SPA -->|WebSocket Duplex| HUB_WS["SignalR Telemetry Hub /hubs/telemetry"]
+    subgraph Client[Client Layer]
+        SPA[React 19 Vite SPA: Enamel Dark Design System] -->|REST API over Axios| GW[Nginx Reverse Proxy / Port 3001]
+        SPA -->|WebSocket Duplex| HUB_WS[SignalR Telemetry Hub]
     end
 
-    subgraph Security["Defense & Security Layer"]
-        GW -->|Port 5000| RATE["ASP.NET Core Rate Limiter: Auth, Hold, Search"]
-        RATE -->|Rate Limit Passed| JWT["JWT Bearer Auth & Policy Authorization"]
-        JWT --> CTRL["API Controllers"]
+    subgraph Security[Defense and Security Layer]
+        GW -->|Port 5000| RATE[ASP.NET Core Rate Limiter]
+        RATE -->|Rate Limit Passed| JWT[JWT Bearer Auth and Policy Authorization]
+        JWT --> CTRL[API Controllers]
     end
 
-    subgraph DomainLayer["Core Domain & Application Layer"]
-        CTRL --> MED["MediatR Mediator Pipeline"]
-        MED --> SRV["Booking & Availability Application Services"]
-        SRV --> DOM["Domain Model: Segment Overlap & Entity Invariants"]
+    subgraph DomainLayer[Core Domain and Application Layer]
+        CTRL --> MED[MediatR Mediator Pipeline]
+        MED --> SRV[Booking and Availability Application Services]
+        SRV --> DOM[Domain Model: Segment Overlap and Entity Invariants]
     end
 
-    subgraph Infra["Data Infrastructure & Persistence Layer"]
-        SRV --> UOW["UnitOfWork: Serializable Transaction & Retry Loop"]
-        UOW --> PG[("PostgreSQL 17: SeatBookings + btree_gist Exclusion Constraint")]
-        SRV --> REDIS[("Redis 7: Refresh Tokens & Availability Cache")]
+    subgraph Infra[Data Infrastructure and Persistence Layer]
+        SRV --> UOW[UnitOfWork: Serializable Transaction and Retry Loop]
+        UOW --> PG[(PostgreSQL 17 Database)]
+        SRV --> REDIS[(Redis 7 Cache and Token Store)]
     end
 
-    subgraph Workers["Event Sweeper & Outbox Pipeline"]
-        SWEEP["ExpiredHoldSweeper Background Worker"] -->|30s Poll| PG
-        OUTBOX["OutboxProcessor Background Worker"] -->|5s Poll| PG
+    subgraph Workers[Event Sweeper and Outbox Pipeline]
+        SWEEP[ExpiredHoldSweeper Background Worker] -->|30s Poll| PG
+        OUTBOX[OutboxProcessor Background Worker] -->|5s Poll| PG
         OUTBOX -->|MediatR Event Dispatch| MED
     end
 
-    subgraph Gateway["External Gateway Resilience"]
-        SRV --> RESILIENCE["Microsoft.Extensions.Http.Resilience: Retries, Circuit Breaker"]
-        RESILIENCE --> PAYSTACK["Paystack Gateway API"]
+    subgraph Gateway[External Gateway Resilience]
+        SRV --> RESILIENCE[Microsoft.Extensions.Http.Resilience Handlers]
+        RESILIENCE --> PAYSTACK[Paystack Gateway API]
     end
 ```
 

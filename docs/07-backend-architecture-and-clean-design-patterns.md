@@ -24,39 +24,39 @@ $$\text{Domain} \impliedby \text{Application} \impliedby \text{Infrastructure} \
 
 ```mermaid
 flowchart TD
-    subgraph Layer4["Layer 4: API & Composition Root (BitRoute.Api)"]
-        CTRL["Controllers: Auth, Bookings, Schedules, Webhooks"]
-        HUB["SignalR TelemetryHub /hubs/telemetry"]
-        MID["ExceptionMiddleware & RateLimiter"]
+    subgraph ApiLayer[Layer 4: API and Composition Root - BitRoute.Api]
+        CTRL[Controllers: Auth, Bookings, Schedules, Webhooks]
+        HUB[SignalR TelemetryHub]
+        MID[ExceptionMiddleware and RateLimiter]
     end
 
-    subgraph Layer3["Layer 3: Application Use Cases (BitRoute.Application)"]
-        MED["MediatR Mediator & In-Process Bus"]
-        BS["BookingService"]
-        AS["AuthService"]
-        HANDLERS["Event Handlers"]
+    subgraph AppLayer[Layer 3: Application Use Cases - BitRoute.Application]
+        MED[MediatR Mediator and Event Bus]
+        BS[BookingService]
+        AS[AuthService]
+        HANDLERS[Event Handlers]
     end
 
-    subgraph Layer1["Layer 1: Core Domain (BitRoute.Domain)"]
-        ENTITIES["Domain Entities: SeatBooking, Schedule, User"]
-        VO["Value Object: Segment Overlap Math"]
-        EVENTS["Domain Events: SeatHoldExpiredEvent"]
-        EXCEPTIONS["Domain Exceptions: OverlappingBookingException"]
+    subgraph DomainLayer[Layer 1: Core Domain - BitRoute.Domain]
+        ENTITIES[Domain Entities: SeatBooking, Schedule, User]
+        VO[Value Object: Segment Overlap Math]
+        EVENTS[Domain Events: SeatHoldExpiredEvent]
+        EXCEPTIONS[Domain Exceptions: OverlappingBookingException]
     end
 
-    subgraph Layer2["Layer 2: Infrastructure (BitRoute.Infrastructure)"]
-        EF["ApplicationDbContext: EF Core Npgsql"]
-        UOW["UnitOfWork: Serializable Transaction & Retry Runner"]
-        REDIS_STORE["RedisRefreshTokenStore & RedisCacheService"]
-        PAYSTACK_SRV["PaystackService + Resilience Handler"]
-        WORKER1["ExpiredHoldSweeper HostedService"]
-        WORKER2["OutboxProcessor HostedService"]
+    subgraph InfraLayer[Layer 2: Infrastructure - BitRoute.Infrastructure]
+        EF[ApplicationDbContext: EF Core Npgsql]
+        UOW[UnitOfWork: Serializable Transaction and Retry Runner]
+        REDIS_STORE[RedisRefreshTokenStore and RedisCacheService]
+        PAYSTACK_SRV[PaystackService and Resilience Handler]
+        WORKER1[ExpiredHoldSweeper HostedService]
+        WORKER2[OutboxProcessor HostedService]
     end
 
-    subgraph External["Data Stores & External Systems"]
-        PG[("PostgreSQL 17 DB + btree_gist Exclusion Constraint")]
-        REDIS[("Redis 7 Cache & Token Store")]
-        GATEWAY["Paystack API Server"]
+    subgraph External[Data Stores and External Systems]
+        PG[(PostgreSQL 17 Database)]
+        REDIS[(Redis 7 Cache and Token Store)]
+        GATEWAY[Paystack API Gateway]
     end
 
     CTRL --> BS
