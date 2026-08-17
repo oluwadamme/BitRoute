@@ -12,6 +12,10 @@ public sealed class OutboxMessage
     public string Content { get; private set; } = string.Empty;
     public DateTimeOffset? ProcessedOnUtc { get; private set; }
     public string? Error { get; private set; }
+    public int RetryCount { get; private set; }
+    public DateTimeOffset? NextAttemptUtc { get; private set; }
+
+    public const int MaxRetries = 5;
 
     private OutboxMessage() { }
 
@@ -27,17 +31,30 @@ public sealed class OutboxMessage
             Type = type,
             Content = content,
             ProcessedOnUtc = null,
-            Error = null
+            Error = null,
+            RetryCount = 0,
+            NextAttemptUtc = null
         };
     }
 
     public void MarkProcessed(DateTimeOffset processedOnUtc)
     {
         ProcessedOnUtc = processedOnUtc;
+        Error = null;
+        NextAttemptUtc = null;
     }
 
-    public void MarkFailed(string error)
+    public void RecordFailure(string error, DateTimeOffset nextAttemptUtc)
     {
+        RetryCount++;
         Error = error;
+        NextAttemptUtc = nextAttemptUtc;
+    }
+
+    public void RecordDeadLetter(string error)
+    {
+        RetryCount++;
+        Error = $"[DEAD-LETTER] Max retries ({MaxRetries}) exceeded: {error}";
+        NextAttemptUtc = null;
     }
 }

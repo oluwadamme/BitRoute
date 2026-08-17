@@ -824,8 +824,22 @@ export const OperatorTab: React.FC<OperatorTabProps> = ({ currentUser }) => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
                   {selectedSchedRoute.stops.slice(0, -1).map((stop, index) => {
                     const nextStop = selectedSchedRoute.stops[index + 1];
+
+                    /*
+                     * The stop pair lives in the hint, not the label. As a label
+                     * it read `Leg 0: Lagos → Sagamu`, whose length depends on
+                     * the route's stop names — so one column's label wrapped to
+                     * two lines while its neighbour's did not, pushing the two
+                     * fare inputs to different heights. A short, fixed-width
+                     * label keeps every row aligned whatever the stops are called.
+                     */
                     return (
-                      <Field key={index} label={`Leg ${index}: ${stop} → ${nextStop}`} error={legFareErrors[index] ?? null}>
+                      <Field
+                        key={index}
+                        label={`Leg ${index}`}
+                        hint={`${stop} → ${nextStop}`}
+                        error={legFareErrors[index] ?? null}
+                      >
                         {(ids) => (
                           <input
                             {...ids}

@@ -19,9 +19,12 @@ public sealed class OutboxMessageConfiguration : IEntityTypeConfiguration<Outbox
         builder.Property(o => o.Content)
             .IsRequired();
 
-        builder.Property(o => o.OccurredOnUtc)
+        builder.Property(o => o.RetryCount)
+            .HasDefaultValue(0)
             .IsRequired();
 
-        builder.HasIndex(o => new { o.ProcessedOnUtc, o.OccurredOnUtc });
+        builder.Property(o => o.NextAttemptUtc);
+
+        builder.HasIndex(o => new { o.ProcessedOnUtc, o.NextAttemptUtc, o.OccurredOnUtc });
     }
 }
