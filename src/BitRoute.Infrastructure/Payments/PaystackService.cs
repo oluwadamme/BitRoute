@@ -81,9 +81,13 @@ public sealed class PaystackService : IPaystackService
 
         using var hmac = new HMACSHA512(keyBytes);
         var hash = hmac.ComputeHash(payloadBytes);
-        var computedSignature = Convert.ToHexStringLower(hash);
+        var computedBytes = Encoding.UTF8.GetBytes(Convert.ToHexStringLower(hash));
+        var headerBytes = Encoding.UTF8.GetBytes(signatureHeader.ToLowerInvariant());
 
-        return string.Equals(computedSignature, signatureHeader, StringComparison.OrdinalIgnoreCase);
+        if (computedBytes.Length != headerBytes.Length)
+            return false;
+
+        return CryptographicOperations.FixedTimeEquals(computedBytes, headerBytes);
     }
 
     private sealed record PaystackInitApiResponse(
