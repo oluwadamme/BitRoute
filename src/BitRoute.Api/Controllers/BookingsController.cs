@@ -40,6 +40,7 @@ public sealed class BookingsController : ControllerBase
 
     /// <summary>Initializes a Paystack transaction for a held seat booking (authenticated passenger).</summary>
     [Authorize]
+    [EnableRateLimiting("HoldPolicy")]
     [HttpPost("{bookingId:guid}/pay")]
     public async Task<ActionResult<ApiResponse<BitRoute.Domain.Interfaces.PaystackInitializeResponse>>> InitializePaystackPayment(
         Guid bookingId,

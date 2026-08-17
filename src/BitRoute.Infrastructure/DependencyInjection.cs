@@ -77,7 +77,8 @@ public static class DependencyInjection
         services.AddOptions<Payments.PaystackOptions>()
             .Bind(configuration.GetSection(Payments.PaystackOptions.SectionName));
 
-        services.AddHttpClient<IPaystackService, Payments.PaystackService>();
+        services.AddHttpClient<IPaystackService, Payments.PaystackService>()
+            .AddStandardResilienceHandler();
 
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IRouteRepository, RouteRepository>();

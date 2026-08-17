@@ -26,6 +26,7 @@ public sealed class AuthController : ControllerBase
     }
 
     /// <summary>Creates a passenger account and starts a session (auto-login).</summary>
+    [EnableRateLimiting("AuthPolicy")]
     [HttpPost("register")]
     public async Task<ActionResult<ApiResponse<AuthResult>>> Register(
         RegisterRequest request, CancellationToken cancellationToken)
@@ -42,6 +43,7 @@ public sealed class AuthController : ControllerBase
         => Ok(await _auth.LoginAsync(request, cancellationToken));
 
     /// <summary>Rotates the refresh token; a replayed token revokes the whole session.</summary>
+    [EnableRateLimiting("AuthPolicy")]
     [HttpPost("refresh")]
     public async Task<ActionResult<ApiResponse<AuthResult>>> Refresh(
         RefreshRequest request, CancellationToken cancellationToken)

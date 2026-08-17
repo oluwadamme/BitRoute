@@ -47,6 +47,14 @@ builder.Services.AddSignalR();
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        context.HttpContext.Response.ContentType = "application/json";
+        await context.HttpContext.Response.WriteAsJsonAsync(
+            ApiResponse.Error("Rate limit exceeded. Please try again later."), cancellationToken);
+    };
+
     options.AddFixedWindowLimiter("HoldPolicy", opt =>
     {
         opt.Window = TimeSpan.FromMinutes(1);
@@ -57,6 +65,12 @@ builder.Services.AddRateLimiter(options =>
     {
         opt.Window = TimeSpan.FromMinutes(1);
         opt.PermitLimit = 10;
+        opt.QueueLimit = 0;
+    });
+    options.AddFixedWindowLimiter("PublicSearchPolicy", opt =>
+    {
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.PermitLimit = 60;
         opt.QueueLimit = 0;
     });
 });

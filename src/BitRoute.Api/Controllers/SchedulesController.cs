@@ -2,6 +2,7 @@ using BitRoute.Application;
 using BitRoute.Application.Booking;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace BitRoute.Api.Controllers;
 
@@ -37,6 +38,7 @@ public sealed class SchedulesController : ControllerBase
     }
 
     /// <summary>Lists all available schedule departures.</summary>
+    [EnableRateLimiting("PublicSearchPolicy")]
     [HttpGet]
     public async Task<ActionResult<ApiResponse<IReadOnlyCollection<ScheduleDto>>>> GetAllSchedules(
         CancellationToken cancellationToken)
@@ -46,6 +48,7 @@ public sealed class SchedulesController : ControllerBase
     }
 
     /// <summary>Retrieves available seats and price for a schedule on a travel date.</summary>
+    [EnableRateLimiting("PublicSearchPolicy")]
     [HttpGet("{scheduleId:guid}/availability")]
     public async Task<ActionResult<ApiResponse<ScheduleAvailabilityResponse>>> GetAvailability(
         Guid scheduleId,
