@@ -131,6 +131,43 @@ ASP.NET Core SignalR over WebSockets opens persistent duplex channels that strea
 
 ## Architecture
 
+```mermaid
+flowchart TD
+    subgraph Client Layer
+        SPA[React 19 Vite SPA: Enamel Dark Design System] -->|REST API over Axios| GW[Nginx Reverse Proxy / Port 3001]
+        SPA -->|WebSocket Duplex| HUB_WS[SignalR Telemetry Hub /hubs/telemetry]
+    end
+
+    subgraph Defense & Security Layer
+        GW -->|Port 5000| RATE[ASP.NET Core Rate Limiter: Auth, Hold, Search]
+        RATE -->|Rate Limit Passed| JWT[JWT Bearer Auth & Policy Authorization]
+        JWT --> CTRL[API Controllers]
+    end
+
+    subgraph Core Domain & Application Layer
+        CTRL --> MED[MediatR Mediator Pipeline]
+        MED --> SRV[Booking & Availability Application Services]
+        SRV --> DOM[Domain Model: Segment Overlap & Entity Invariants]
+    end
+
+    subgraph Data Infrastructure & Persistence Layer
+        SRV --> UOW[UnitOfWork: Serializable Transaction & Retry Loop]
+        UOW --> PG[(PostgreSQL 17: SeatBookings + btree_gist Exclusion Constraint)]
+        SRV --> REDIS[(Redis 7: Refresh Tokens & Availability Cache)]
+    end
+
+    subgraph Event Sweeper & Outbox Pipeline
+        SWEEP[ExpiredHoldSweeper Background Worker] -->|30s Poll| PG
+        OUTBOX[OutboxProcessor Background Worker] -->|5s Poll| PG
+        OUTBOX -->|MediatR Event Dispatch| MED
+    end
+
+    subgraph External Gateway Resilience
+        SRV --> RESILIENCE[Microsoft.Extensions.Http.Resilience: Retries, Circuit Breaker]
+        RESILIENCE --> PAYSTACK[Paystack Gateway API]
+    end
+```
+
 The solution is split into four backend projects plus a Vite React frontend:
 
 - **Api**: controllers, SignalR telemetry hub, Paystack webhook listener, JWT bearer authentication, rate limiting, and exception handling middleware.
@@ -328,8 +365,9 @@ For anyone reviewing this as a portfolio piece or preparing to defend these arch
 3. **[Reserve-Then-Confirm Hold & Production Outbox Pattern](docs/03-reserve-then-confirm-hold-and-outbox-pattern.md)**: Featuring an automatic `ExpiredHoldSweeper` background worker, transactional outbox staging, exponential backoff retries, and dead-lettering.
 4. **[Real-Time Telemetry & Fleet Analytics](docs/04-realtime-telemetry-and-fleet-analytics.md)**: Combining SignalR WebSocket streaming, historical breadcrumbs (`VehicleTelemetryLog`), and leg-by-leg departure occupancy calculations over segment intervals `[BoardingIndex, AlightingIndex)`.
 5. **[Production Defense-in-Depth & System Resilience](docs/05-production-defense-in-depth-and-resilience.md)**: Featuring ASP.NET Core rate limiting policies with custom 429 JSON error envelopes, `Microsoft.Extensions.Http.Resilience` handlers, Redis sliding refresh-token rotation with reuse detection, and multi-container Docker Compose orchestration.
+6. **[Frontend Design System & UI Architecture](docs/06-frontend-design-system-and-ui-architecture.md)**: Featuring the "Enamel Departure Board at Night" domain design tokens, physical ticket perforation components, `AbortController` network cancellation, and WAI-ARIA tab accessibility.
 
-These represent production backend concerns beyond standard CRUD, designed to demonstrate enterprise architecture principles in senior .NET software engineering interviews.
+These represent production full-stack concerns beyond standard CRUD, designed to demonstrate enterprise architecture principles in senior .NET software engineering interviews.
 
 ---
 
