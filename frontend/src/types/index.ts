@@ -132,3 +132,21 @@ export interface TelemetryPayload {
   currentLegIndex: number;
   timestamp: string;
 }
+
+export interface LegOccupancyDto {
+  legIndex: number;
+  startStopName: string;
+  endStopName: string;
+  occupiedSeats: number;
+  totalSeats: number;
+  occupancyPercentage: number;
+}
+
+export interface ScheduleAnalyticsDto {
+  scheduleId: string;
+  travelDate: string;
+  totalCapacity: number;
+  totalConfirmedBookings: number;
+  totalRevenueKobo: number;
+  legOccupancies: LegOccupancyDto[];
+}

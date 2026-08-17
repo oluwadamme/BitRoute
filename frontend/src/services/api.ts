@@ -8,6 +8,7 @@ import {
   CreateVehicleRequest,
   PaystackInitializeResponse,
   RouteDto,
+  ScheduleAnalyticsDto,
   ScheduleAvailabilityResponse,
   ScheduleDto,
   TelemetryPayload,
@@ -262,6 +263,30 @@ export const api = {
       signal,
     });
     return res.data.data || null;
+  },
+
+  getTelemetryHistory: async (
+    id: string,
+    limit: number = 100,
+    signal?: AbortSignal
+  ): Promise<TelemetryPayload[]> => {
+    const res = await apiClient.get<ApiResponse<TelemetryPayload[]>>(`/schedules/${id}/telemetry/history`, {
+      params: { limit },
+      signal,
+    });
+    return res.data.data || [];
+  },
+
+  getScheduleAnalytics: async (
+    id: string,
+    travelDate: string,
+    signal?: AbortSignal
+  ): Promise<ScheduleAnalyticsDto> => {
+    const res = await apiClient.get<ApiResponse<ScheduleAnalyticsDto>>(`/schedules/${id}/analytics`, {
+      params: { travelDate },
+      signal,
+    });
+    return res.data.data!;
   },
 
   // 5. Bookings Endpoints

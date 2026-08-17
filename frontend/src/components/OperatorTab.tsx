@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Clock, Plus, RefreshCw, Send, Settings, UserPlus } from 'lucide-react';
+import { BarChart3, Clock, History, Plus, RefreshCw, Send, Settings, UserPlus } from 'lucide-react';
 import { api, isAbortError, toErrorMessage } from '../services/api';
 import { telemetryService } from '../services/telemetry';
-import { formatDepartureTime, formatFare, shortRef } from '../lib/format';
-import { CreateScheduleLegDto, CreateSeatDto, RouteDto, ScheduleDto, UserProfile, UserRole, VehicleDto } from '../types';
+import { formatDepartureTime, formatFare, formatTimeAgo, shortRef, todayIso } from '../lib/format';
+import { CreateScheduleLegDto, CreateSeatDto, RouteDto, ScheduleAnalyticsDto, ScheduleDto, TelemetryPayload, UserProfile, UserRole, VehicleDto } from '../types';
 import { Card } from './ui/Card';
 import { Button } from './ui/Button';
 import { Badge } from './ui/Badge';
@@ -185,6 +185,40 @@ export const OperatorTab: React.FC<OperatorTabProps> = ({ currentUser }) => {
   const selectedSchedRoute = routes.find((r) => r.id === schedRouteId) ?? null;
   const selectedSimSchedule = schedules.find((s) => s.id === simScheduleId) ?? null;
   const maxSimLegIndex = selectedSimSchedule ? Math.max(selectedSimSchedule.legs.length - 1, 0) : undefined;
+
+  // Fleet Analytics & Telemetry History State
+  const [analyticsTravelDate, setAnalyticsTravelDate] = useState(todayIso());
+  const [scheduleAnalytics, setScheduleAnalytics] = useState<ScheduleAnalyticsDto | null>(null);
+  const [telemetryHistory, setTelemetryHistory] = useState<TelemetryPayload[]>([]);
+  const [isLoadingAnalytics, setIsLoadingAnalytics] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  useEffect(() => {
+    if (!simScheduleId) return;
+    const controller = new AbortController();
+
+    const fetchTelemetryAndAnalytics = async () => {
+      setIsLoadingAnalytics(true);
+      setIsLoadingHistory(true);
+      try {
+        const [analytics, history] = await Promise.all([
+          api.getScheduleAnalytics(simScheduleId, analyticsTravelDate, controller.signal).catch(() => null),
+          api.getTelemetryHistory(simScheduleId, 50, controller.signal).catch(() => []),
+        ]);
+        if (controller.signal.aborted) return;
+        setScheduleAnalytics(analytics);
+        setTelemetryHistory(history);
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsLoadingAnalytics(false);
+          setIsLoadingHistory(false);
+        }
+      }
+    };
+
+    void fetchTelemetryAndAnalytics();
+    return () => controller.abort();
+  }, [simScheduleId, analyticsTravelDate]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1013,6 +1047,116 @@ export const OperatorTab: React.FC<OperatorTabProps> = ({ currentUser }) => {
               Broadcast GPS ping
             </Button>
           </form>
+
+          {/* Schedule Occupancy & Revenue Analytics */}
+          <div className="stock p-4 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <h3 className="text-sm font-bold text-content flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-signal" aria-hidden="true" />
+                Departure Occupancy & Revenue Analytics
+              </h3>
+              <div className="w-44">
+                <Field label="Departure date">
+                  {(ids) => (
+                    <input
+                      {...ids}
+                      type="date"
+                      className={`${controlStyles} figures py-1`}
+                      value={analyticsTravelDate}
+                      onChange={(e) => setAnalyticsTravelDate(e.target.value)}
+                    />
+                  )}
+                </Field>
+              </div>
+            </div>
+
+            {isLoadingAnalytics ? (
+              <p className="flex items-center gap-2 text-xs text-content-muted py-2">
+                <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin shrink-0" aria-hidden="true" />
+                Loading departure analytics…
+              </p>
+            ) : scheduleAnalytics ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="bg-surface-sunk border border-rule rounded-ticket p-3">
+                    <span className="stencil text-content-faint">Confirmed Revenue</span>
+                    <p className="figures text-lg font-bold text-signal mt-0.5">
+                      {formatFare(scheduleAnalytics.totalRevenueKobo)}
+                    </p>
+                  </div>
+                  <div className="bg-surface-sunk border border-rule rounded-ticket p-3">
+                    <span className="stencil text-content-faint">Confirmed Passengers</span>
+                    <p className="figures text-lg font-bold text-content mt-0.5">
+                      {scheduleAnalytics.totalConfirmedBookings} / {scheduleAnalytics.totalCapacity}
+                    </p>
+                  </div>
+                  <div className="bg-surface-sunk border border-rule rounded-ticket p-3">
+                    <span className="stencil text-content-faint">Capacity Load</span>
+                    <p className="figures text-lg font-bold text-stamp mt-0.5">
+                      {scheduleAnalytics.totalCapacity > 0
+                        ? Math.round((scheduleAnalytics.totalConfirmedBookings / scheduleAnalytics.totalCapacity) * 100)
+                        : 0}%
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <h4 className="stencil text-content-muted">Leg-by-Leg Occupancy</h4>
+                  <div className="space-y-2">
+                    {scheduleAnalytics.legOccupancies.map((leg) => (
+                      <div key={leg.legIndex} className="bg-surface-sunk border border-rule rounded-ticket p-3 space-y-1.5">
+                        <div className="flex justify-between items-baseline text-xs">
+                          <span className="font-semibold text-content">
+                            Leg {leg.legIndex}: {leg.startStopName} → {leg.endStopName}
+                          </span>
+                          <span className="figures text-content-muted">
+                            {leg.occupiedSeats} / {leg.totalSeats} seats ({leg.occupancyPercentage}%)
+                          </span>
+                        </div>
+                        <div className="w-full bg-surface border border-rule rounded-full h-2 overflow-hidden">
+                          <div
+                            className="bg-signal h-full transition-all duration-300"
+                            style={{ width: `${Math.min(100, Math.max(0, leg.occupancyPercentage))}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-content-muted py-2">Select a schedule above to view departure analytics.</p>
+            )}
+          </div>
+
+          {/* Historical Telemetry Pings (Breadcrumb Trail) */}
+          <div className="stock p-4 space-y-4">
+            <h3 className="text-sm font-bold text-content flex items-center gap-2">
+              <History className="w-4 h-4 text-signal" aria-hidden="true" />
+              Historical GPS Breadcrumb Logs
+            </h3>
+
+            {isLoadingHistory ? (
+              <p className="flex items-center gap-2 text-xs text-content-muted py-2">
+                <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin shrink-0" aria-hidden="true" />
+                Loading breadcrumb logs…
+              </p>
+            ) : telemetryHistory.length === 0 ? (
+              <p className="text-xs text-content-muted py-2">No historical pings recorded for this schedule yet.</p>
+            ) : (
+              <ul className="ruled max-h-60 overflow-y-auto">
+                {telemetryHistory.map((ping, idx) => (
+                  <li key={idx} className="py-2 flex flex-wrap items-center justify-between text-xs text-content-muted figures">
+                    <div>
+                      <span className="font-semibold text-content mr-2">Leg {ping.currentLegIndex}</span>
+                      <span>Lat {ping.latitude.toFixed(4)}, Lng {ping.longitude.toFixed(4)}</span>
+                    </div>
+                    <span className="stencil text-content-faint">{formatTimeAgo(ping.timestamp)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
 
         {/* Onboard Operator Management (Admin Only) */}
