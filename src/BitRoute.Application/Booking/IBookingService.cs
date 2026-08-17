@@ -62,4 +62,14 @@ public interface IBookingService
     Task<ApiResponse<TelemetryLocationDto>> GetLatestTelemetryAsync(
         Guid scheduleId,
         CancellationToken cancellationToken = default);
+
+    Task<ApiResponse<IReadOnlyCollection<TelemetryLocationDto>>> GetTelemetryHistoryAsync(
+        Guid scheduleId,
+        int limit = 100,
+        CancellationToken cancellationToken = default);
+
+    Task<ApiResponse<ScheduleAnalyticsDto>> GetScheduleAnalyticsAsync(
+        Guid scheduleId,
+        DateOnly travelDate,
+        CancellationToken cancellationToken = default);
 }

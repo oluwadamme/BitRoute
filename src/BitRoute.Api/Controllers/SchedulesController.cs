@@ -68,4 +68,28 @@ public sealed class SchedulesController : ControllerBase
         var response = await _booking.GetLatestTelemetryAsync(id, cancellationToken);
         return Ok(response);
     }
+
+    /// <summary>Retrieves historical GPS breadcrumb pings for a schedule departure (Admin/Operator only).</summary>
+    [Authorize(Roles = "Admin,Operator")]
+    [HttpGet("{id:guid}/telemetry/history")]
+    public async Task<ActionResult<ApiResponse<IReadOnlyCollection<TelemetryLocationDto>>>> GetTelemetryHistory(
+        Guid id,
+        [FromQuery] int limit = 100,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await _booking.GetTelemetryHistoryAsync(id, limit, cancellationToken);
+        return Ok(response);
+    }
+
+    /// <summary>Retrieves leg-by-leg occupancy rates and revenue analytics for a schedule (Admin/Operator only).</summary>
+    [Authorize(Roles = "Admin,Operator")]
+    [HttpGet("{id:guid}/analytics")]
+    public async Task<ActionResult<ApiResponse<ScheduleAnalyticsDto>>> GetScheduleAnalytics(
+        Guid id,
+        [FromQuery] DateOnly travelDate,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await _booking.GetScheduleAnalyticsAsync(id, travelDate, cancellationToken);
+        return Ok(response);
+    }
 }

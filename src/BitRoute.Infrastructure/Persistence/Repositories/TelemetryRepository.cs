@@ -21,4 +21,19 @@ public sealed class TelemetryRepository : ITelemetryRepository
             .OrderByDescending(t => t.TimestampUtc)
             .FirstOrDefaultAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyCollection<VehicleTelemetryLog>> GetHistoryByScheduleIdAsync(
+        Guid scheduleId, int limit = 100, CancellationToken cancellationToken = default)
+    {
+        var clampedLimit = Math.Clamp(limit, 1, 500);
+
+        var list = await _db.VehicleTelemetryLogs
+            .AsNoTracking()
+            .Where(t => t.ScheduleId == scheduleId)
+            .OrderByDescending(t => t.TimestampUtc)
+            .Take(clampedLimit)
+            .ToListAsync(cancellationToken);
+
+        return list.OrderBy(t => t.TimestampUtc).ToList().AsReadOnly();
+    }
 }

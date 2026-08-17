@@ -276,4 +276,53 @@ public class BookingServiceTests
 
         Assert.Equal(SeatBookingStatus.Expired, booking.Status);
     }
+
+    [Fact]
+    public async Task GetTelemetryHistory_ReturnsOrderedHistory()
+    {
+        var log = VehicleTelemetryLog.Create(_schedule.Id, 6.5244, 3.3792, 0, DateTimeOffset.UtcNow);
+
+        _telemetryRepositoryMock.Setup(r => r.GetHistoryByScheduleIdAsync(_schedule.Id, 100, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { log });
+
+        var response = await _service.GetTelemetryHistoryAsync(_schedule.Id, 100);
+
+        Assert.True(response.Status);
+        Assert.Single(response.Data!);
+        Assert.Equal(6.5244, response.Data!.First().Latitude);
+    }
+
+    [Fact]
+    public async Task GetScheduleAnalytics_CalculatesLegOccupanciesAndRevenue()
+    {
+        var travelDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
+
+        var confirmedBooking = SeatBooking.CreateHeld(
+            Guid.NewGuid(), _schedule.Id, travelDate, _seat1.Id, 0, 1, 1000, "confirmed-key");
+        confirmedBooking.Confirm(DateTimeOffset.UtcNow);
+
+        _scheduleRepositoryMock.Setup(r => r.GetByIdAsync(_schedule.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(_schedule);
+
+        _vehicleRepositoryMock.Setup(r => r.GetSeatsByVehicleIdAsync(_vehicle.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { _seat1, _seat2 });
+
+        _bookingRepositoryMock.Setup(r => r.GetActiveBookingsAsync(_schedule.Id, travelDate, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { confirmedBooking });
+
+        var response = await _service.GetScheduleAnalyticsAsync(_schedule.Id, travelDate);
+
+        Assert.True(response.Status);
+        Assert.Equal(2, response.Data!.TotalCapacity);
+        Assert.Equal(1, response.Data.TotalConfirmedBookings);
+        Assert.Equal(1000, response.Data.TotalRevenueKobo);
+
+        var leg0 = response.Data.LegOccupancies.First(l => l.LegIndex == 0);
+        Assert.Equal(1, leg0.OccupiedSeats);
+        Assert.Equal(50.0, leg0.OccupancyPercentage);
+
+        var leg1 = response.Data.LegOccupancies.First(l => l.LegIndex == 1);
+        Assert.Equal(0, leg1.OccupiedSeats);
+        Assert.Equal(0.0, leg1.OccupancyPercentage);
+    }
 }

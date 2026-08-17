@@ -156,3 +156,22 @@ public sealed record TelemetryLocationDto(
     double Longitude,
     int CurrentLegIndex,
     DateTimeOffset Timestamp);
+
+/// <summary>Leg-by-leg occupancy details for a schedule departure.</summary>
+public sealed record LegOccupancyDto(
+    int LegIndex,
+    string StartStopName,
+    string EndStopName,
+    int OccupiedSeats,
+    int TotalSeats,
+    double OccupancyPercentage);
+
+/// <summary>Analytics summary for a schedule departure on a specific date.</summary>
+public sealed record ScheduleAnalyticsDto(
+    Guid ScheduleId,
+    DateOnly TravelDate,
+    int TotalCapacity,
+    int TotalConfirmedBookings,
+    int TotalRevenueKobo,
+    List<LegOccupancyDto> LegOccupancies);
+

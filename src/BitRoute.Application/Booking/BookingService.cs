@@ -401,4 +401,71 @@ public sealed class BookingService : IBookingService
 
         return ApiResponse.Success(dto, "Latest telemetry location retrieved from history log.");
     }
+
+    public async Task<ApiResponse<IReadOnlyCollection<TelemetryLocationDto>>> GetTelemetryHistoryAsync(
+        Guid scheduleId, int limit = 100, CancellationToken cancellationToken = default)
+    {
+        var logs = await _telemetryRepository.GetHistoryByScheduleIdAsync(scheduleId, limit, cancellationToken);
+        var dtos = logs.Select(l => new TelemetryLocationDto(
+            l.ScheduleId,
+            l.Latitude,
+            l.Longitude,
+            l.CurrentLegIndex,
+            l.TimestampUtc)).ToList();
+
+        return ApiResponse.Success<IReadOnlyCollection<TelemetryLocationDto>>(dtos, "Telemetry history retrieved successfully.");
+    }
+
+    public async Task<ApiResponse<ScheduleAnalyticsDto>> GetScheduleAnalyticsAsync(
+        Guid scheduleId, DateOnly travelDate, CancellationToken cancellationToken = default)
+    {
+        var schedule = await _scheduleRepository.GetByIdAsync(scheduleId, cancellationToken);
+        if (schedule is null)
+        {
+            throw new BookingDomainException($"Schedule '{scheduleId}' not found.");
+        }
+
+        var activeBookings = await _bookingRepository.GetActiveBookingsAsync(scheduleId, travelDate, cancellationToken);
+        var confirmedBookings = activeBookings.Where(b => b.Status == SeatBookingStatus.Confirmed).ToList();
+
+        var seats = schedule.Vehicle?.Seats;
+        if (seats is null || seats.Count == 0)
+        {
+            var fetchedSeats = await _vehicleRepository.GetSeatsByVehicleIdAsync(schedule.VehicleId, cancellationToken);
+            seats = fetchedSeats.ToList();
+        }
+
+        var totalCapacity = seats.Count;
+        var totalRevenueKobo = confirmedBookings.Sum(b => b.Price);
+
+        var legOccupancies = new List<LegOccupancyDto>();
+        var stops = schedule.Route?.Stops.ToDictionary(s => s.Index, s => s.Name) ?? new();
+
+        foreach (var leg in schedule.ScheduleLegs.OrderBy(l => l.StartStopIndex))
+        {
+            var startName = stops.GetValueOrDefault(leg.StartStopIndex, $"Stop {leg.StartStopIndex}");
+            var endName = stops.GetValueOrDefault(leg.EndStopIndex, $"Stop {leg.EndStopIndex}");
+
+            var occupied = activeBookings.Count(b => b.BoardingIndex <= leg.StartStopIndex && b.AlightingIndex >= leg.EndStopIndex);
+            var percentage = totalCapacity > 0 ? Math.Round((double)occupied / totalCapacity * 100.0, 1) : 0.0;
+
+            legOccupancies.Add(new LegOccupancyDto(
+                leg.StartStopIndex,
+                startName,
+                endName,
+                occupied,
+                totalCapacity,
+                percentage));
+        }
+
+        var dto = new ScheduleAnalyticsDto(
+            scheduleId,
+            travelDate,
+            totalCapacity,
+            confirmedBookings.Count,
+            totalRevenueKobo,
+            legOccupancies);
+
+        return ApiResponse.Success(dto, "Schedule analytics generated successfully.");
+    }
 }
