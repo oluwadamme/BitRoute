@@ -366,6 +366,7 @@ For anyone reviewing this as a portfolio piece or preparing to defend these arch
 4. **[Real-Time Telemetry & Fleet Analytics](docs/04-realtime-telemetry-and-fleet-analytics.md)**: Combining SignalR WebSocket streaming, historical breadcrumbs (`VehicleTelemetryLog`), and leg-by-leg departure occupancy calculations over segment intervals `[BoardingIndex, AlightingIndex)`.
 5. **[Production Defense-in-Depth & System Resilience](docs/05-production-defense-in-depth-and-resilience.md)**: Featuring ASP.NET Core rate limiting policies with custom 429 JSON error envelopes, `Microsoft.Extensions.Http.Resilience` handlers, Redis sliding refresh-token rotation with reuse detection, and multi-container Docker Compose orchestration.
 6. **[Frontend Design System & UI Architecture](docs/06-frontend-design-system-and-ui-architecture.md)**: Featuring the "Enamel Departure Board at Night" domain design tokens, physical ticket perforation components, `AbortController` network cancellation, and WAI-ARIA tab accessibility.
+7. **[Backend Clean Architecture & System Design Patterns](docs/07-backend-architecture-and-clean-design-patterns.md)**: Featuring Clean Architecture layer isolation enforced by NetArchTest rules, DDD aggregate root invariants, MediatR CQRS event buses, and dependency injection lifecycle scoping.
 
 These represent production full-stack concerns beyond standard CRUD, designed to demonstrate enterprise architecture principles in senior .NET software engineering interviews.
 
