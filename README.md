@@ -114,44 +114,47 @@ ASP.NET Core SignalR over WebSockets opens persistent duplex channels that strea
 
 | Concern | Choice |
 | --- | --- |
-| Language / runtime | C# / ASP.NET Core |
-| Database | PostgreSQL (with `btree_gist`) |
-| ORM | EF Core (Npgsql) |
-| Caching / token store | Redis |
-| Identity | ASP.NET Core Identity (password hashing) + JWT |
+| Language / runtime | C# / ASP.NET Core (.NET 10) |
+| Database | PostgreSQL 17 (with `btree_gist`) |
+| ORM | EF Core (Npgsql / SQLite for tests) |
+| Caching / token store | Redis 7 |
+| Identity | ASP.NET Core Identity (password hashing) + JWT bearer auth |
 | In-process events | MediatR |
-| Payments | Stripe (webhooks, signature verification) |
+| Outbox & Sweeper | Hosted BackgroundServices (`OutboxProcessor`, `ExpiredHoldSweeper`) |
+| Rate Limiting | ASP.NET Core Rate Limiting (fixed-window policies + `ApiResponse.Error` 429 envelope) |
+| Gateway Resilience | `Microsoft.Extensions.Http.Resilience` (exponential retries, circuit breaker, timeouts) |
+| Payments | Paystack (webhooks, HMAC-SHA512 fixed-time signature verification) |
 | Real-time | ASP.NET Core SignalR (WebSockets) |
-| Background jobs | Hangfire |
-| Logging | Serilog (structured, correlation ids) |
-| Testing | xUnit, WebApplicationFactory, Testcontainers |
+| Frontend SPA | React 19, TypeScript 5, Vite 6, Tailwind CSS 3 |
+| Testing | xUnit, WebApplicationFactory, NetArchTest, Moq |
 | Local infra | Docker Compose |
 
 ## Architecture
 
-The solution is split into four projects:
+The solution is split into four backend projects plus a Vite React frontend:
 
-- **Api**: controllers, SignalR hubs, the Stripe webhook endpoint, authentication, error handling.
-- **Application**: use cases, the availability and booking services, MediatR handlers, DTOs.
-- **Domain**: entities and the overlap rules as behavior on the entities themselves.
-- **Infrastructure**: EF Core, the range mapping and exclusion-constraint migration, the Redis token store, Hangfire jobs, the Stripe client.
+- **Api**: controllers, SignalR telemetry hub, Paystack webhook listener, JWT bearer authentication, rate limiting, and exception handling middleware.
+- **Application**: use cases, booking and availability services, MediatR handlers, DTOs, and FluentValidation.
+- **Domain**: rich domain entities, value objects (`Segment`), domain events (`SeatHoldExpiredEvent`), and overlap invariants.
+- **Infrastructure**: EF Core, `btree_gist` exclusion-constraint migration, Redis token & availability cache stores, hosted background workers (`ExpiredHoldSweeper`, `OutboxProcessor`), and Paystack client with resilience handlers.
+- **Frontend**: Vite React 19 SPA with enamel departure board dark design system, SignalR telemetry client, and operator management console.
 
-The read path (availability) is cacheable and tolerant of staleness. The write path (booking) is strongly consistent and guarded by both the Serializable transaction and the database constraint. The API is stateless so it scales horizontally, with PostgreSQL as the single source of truth.
+The read path (availability) is cached in Redis and invalidated on writes. The write path (booking) is strongly consistent and guarded by both the Serializable transaction retry loop and the database exclusion constraint.
 
 ## Domain model
 
 The relational chain is `Route -> Schedule -> ScheduleLeg -> SeatBooking`.
 
-- **User**: account, roles (passenger, operator, admin).
+- **User**: account, roles (`Passenger`, `Operator`, `Admin`).
 - **Stop**: a named location with an order index along a route.
 - **Route**: an ordered set of stops, the geography.
-- **Schedule**: a departure of a route by a vehicle, carrying the departure time and recurrence.
+- **Schedule**: a departure of a route by a vehicle, carrying departure time and legs.
 - **ScheduleLeg**: an ordered leg between two consecutive stops on a schedule, with its index and fare.
 - **Vehicle / Seat**: the physical seats a schedule's vehicle provides.
-- **SeatBooking**: a user, a schedule, a travel date, a seat, a boarding index, an alighting index, a status, a price, and a hold expiry.
-- **Payment**: a booking, a Stripe reference, an amount in minor units, a status, and an idempotency key.
+- **SeatBooking**: a user, a schedule, a travel date, a seat, a boarding index, an alighting index, a status (`Held`, `Confirmed`, `Expired`, `Cancelled`), a price in kobo, and a hold expiry.
+- **OutboxMessage**: an event type, serialized JSON payload, retry count, next attempt UTC timestamp, and processed UTC timestamp.
 
-Pricing for a journey is the sum of the `ScheduleLeg` fares for the legs traversed, so A to C costs the A-B fare plus the B-C fare. The travel date lives on the `SeatBooking`, which keeps the model light. If you later need per-departure state (a cancelled or delayed run, a swapped vehicle), materialize dated departure rows instead.
+Pricing for a journey is the sum of the `ScheduleLeg` fares for the legs traversed, so A to C costs the A-B fare plus the B-C fare.
 
 ## Booking lifecycle
 
@@ -159,9 +162,9 @@ Pricing for a journey is the sum of the `ScheduleLeg` fares for the legs travers
    create booking
         |
         v
-     [ HELD ] --- hold expires ---> [ EXPIRED ]  (seat released)
+     [ HELD ] --- hold expires ---> [ EXPIRED ]  (seat released via ExpiredHoldSweeper)
         |
-   payment confirmed (Stripe webhook -> MediatR)
+   payment confirmed (Paystack HMAC-SHA512 webhook -> MediatR)
         |
         v
   [ CONFIRMED ]
@@ -172,7 +175,7 @@ Pricing for a journey is the sum of the `ScheduleLeg` fares for the legs travers
   [ CANCELLED ]  (seat released)
 ```
 
-A booking is created in `HELD` state, which reserves the seat and starts an expiry timer. The seat stays excluded from availability while held. A Hangfire sweep releases holds that expire before payment completes. A confirmed Stripe payment moves the booking to `CONFIRMED`. Status changes go through domain methods on the entity, which reject illegal transitions.
+A booking is created in `HELD` state, which reserves the seat and starts a 10-minute hold window. The seat stays excluded from availability while held. An `ExpiredHoldSweeper` background service releases holds that expire before payment completes and stages outbox messages. A confirmed Paystack payment transitions the booking to `CONFIRMED`.
 
 ## Identity and auth
 
@@ -188,24 +191,24 @@ Payment is tied to the hold, so a seat is never confirmed without money and neve
 create booking (HELD)
         |
         v
-create Stripe PaymentIntent  --->  return client secret
+initialize Paystack transaction  --->  return checkout URL & reference
         |
    user pays
         |
         v
-Stripe webhook  --->  verify signature  --->  publish MediatR PaymentConfirmed
-        |                                              |
-   failure or timeout                                  v
-        |                                     handler confirms booking
-        v                                     and writes to the outbox
+Paystack webhook  --->  verify HMAC-SHA512 signature  --->  publish MediatR PaymentConfirmedNotification
+        |               (constant-time FixedTimeEquals)               |
+   failure or timeout                                                 v
+        |                                                    PaymentConfirmedHandler
+        v                                                    confirms booking & invalidates cache
 release hold (EXPIRED)
 ```
 
-Two rules that matter: verify the Stripe signature before trusting the payload, and dedupe on Stripe's event id so a re-delivered webhook does not confirm twice. No card data touches the system. Money is stored as integer minor units, never a float. MediatR keeps the webhook handler thin and the booking confirmation decoupled from the HTTP request.
+Two rules that matter: verify the Paystack signature using `CryptographicOperations.FixedTimeEquals` before trusting the payload, and dedupe on Paystack's event reference so a re-delivered webhook does not confirm twice. No card data touches the system. Money is stored as integer minor units (kobo), never a float.
 
-## Real-time telemetry
+## Real-time telemetry & analytics
 
-A SignalR hub holds persistent duplex connections. Driver clients push GPS pings, which the server maps onto the schedule's legs to know which leg a vehicle is currently on. From that, it computes live booking windows and pushes them to standby passengers watching a route, so a seat that frees up mid-journey can be offered in real time. This channel is intentionally separate from the transactional booking core: a dropped socket must never affect a confirmed booking.
+A SignalR hub (`/hubs/telemetry`) holds persistent duplex WebSockets. Driver clients push GPS pings, which the server maps onto the schedule's legs. Historical breadcrumb logs are persisted in PostgreSQL (`VehicleTelemetryLog`) and queried via `GET /schedules/{id}/telemetry/history`. Leg-by-leg occupancy rates over segment intervals `[BoardingIndex, AlightingIndex)` and confirmed revenue are calculated via `GET /schedules/{id}/analytics` and rendered on the operator console (`OperatorTab.tsx`).
 
 ## Scheduled vs realtime booking
 
@@ -299,22 +302,34 @@ Built as a series of phases, each shippable on its own. Build a thin vertical sl
   - [x] DB Exclusion Constraint: PostgreSQL `btree_gist` extension and range-level exclusion constraint preventing overlapping legs on the same seat.
   - [x] Hold-and-expiry lifecycle: seat reservations default to a 10-minute hold window, swept and cleared by the `ExpiredHoldSweeper` background service.
   - [x] Testing quality gate: complete unit tests (`BookingServiceTests`) and multi-threaded concurrency integration tests (`ConcurrencyTests`) verifying conflict rejection.
-- **Phase 4, webhook architecture**: the Stripe server-side integration, a signature-verified callback endpoint, idempotent event handling, and MediatR notifications on confirmation.
-- **Phase 5, real-time WebSockets**: the SignalR hub, and mapping incoming GPS pings onto active leg windows.
-- **Phase 6, testing quality gates**: unit tests over the overlap logic, Testcontainers integration tests, and the multi-threaded collision test that hits identical seat paths in parallel.
-
-Cross-cutting work (availability caching, rate limiting, the outbox, observability, and idempotent schedule generation) lands alongside the phases it touches.
+- **Phase 4, webhook architecture & payment settlement**: Paystack server-side integration, signature-verified callback endpoint, idempotent event handling, and MediatR notifications on confirmation.
+  - [x] Paystack transaction initialization with minor unit (kobo) currency calculation and callback URL parameterization.
+  - [x] Constant-time HMAC-SHA512 signature verification (`CryptographicOperations.FixedTimeEquals`) preventing timing attacks.
+  - [x] Decoupled order settlement via MediatR `PaymentConfirmedNotification` and `PaymentConfirmedHandler`.
+  - [x] Idempotency deduplication preventing replayed webhooks from processing twice.
+- **Phase 5, real-time WebSockets & fleet analytics**: SignalR telemetry hub, historical driver breadcrumb logs, leg-by-leg occupancy rates, and revenue analytics.
+  - [x] SignalR telemetry hub (`/hubs/telemetry`) streaming live driver GPS location pings over persistent WebSocket channels.
+  - [x] Historical telemetry breadcrumb storage (`VehicleTelemetryLog`) and query endpoint (`GET /schedules/{id}/telemetry/history`).
+  - [x] Leg-by-leg departure occupancy calculation over segment intervals `[BoardingIndex, AlightingIndex)` and revenue metrics (`GET /schedules/{id}/analytics`).
+  - [x] Full UI integration in `OperatorTab.tsx` displaying live metrics, progress bars, and breadcrumb trails.
+- **Phase 6, testing quality gates, rate limiting & gateway resilience**: unit tests over overlap logic, integration tests, ASP.NET Core Rate Limiting, HTTP client resilience handlers, and multi-container Docker Compose.
+  - [x] 100 passing unit and integration tests across 5 test projects (`Domain.Tests`, `Application.Tests`, `Infrastructure.Tests`, `Api.Tests`, `ArchitectureTests`).
+  - [x] Defense-in-depth ASP.NET Core Rate Limiting (`AuthPolicy`, `HoldPolicy`, `PublicSearchPolicy`) with standard 429 JSON error envelopes.
+  - [x] Production Outbox pattern (`OutboxProcessor`) with MediatR dispatch, exponential backoff retries, dead-lettering, and Redis cache invalidation.
+  - [x] Gateway resilience via `Microsoft.Extensions.Http.Resilience` (3 retries with exponential backoff, circuit breaker, 10s timeouts).
+  - [x] Docker Compose multi-container stack (`postgres`, `redis`, `api`, `web`) with healthcheck dependency ordering.
 
 ## What this project demonstrates
 
 For anyone reviewing this as a portfolio piece, look here first:
 
-1. **Concurrency-correct segment inventory**, defended by both Serializable transactions and a PostgreSQL exclusion constraint, proven by a passing parallel-booking test.
-2. **Asynchronous, signature-verified Stripe payments** decoupled through MediatR, with idempotent webhooks and correct money handling.
-3. **The reserve-then-confirm hold pattern**, including automatic release of expired holds.
-4. **Real-time telemetry over SignalR**, kept cleanly separate from the transactional core.
+1. **Concurrency-correct segment inventory**, defended by both Serializable transactions and a PostgreSQL exclusion constraint, proven by passing parallel-booking concurrency tests.
+2. **Asynchronous, signature-verified Paystack payments** decoupled through MediatR, with constant-time HMAC-SHA512 verification, idempotent webhooks, and correct minor-unit money handling.
+3. **The reserve-then-confirm hold pattern**, featuring an automatic `ExpiredHoldSweeper` background service and production Outbox pattern.
+4. **Real-time telemetry and fleet analytics**, combining SignalR WebSocket streaming, historical breadcrumbs, and leg-by-leg departure occupancy tracking.
+5. **Production defense-in-depth**, featuring ASP.NET Core rate limiting policies, HTTP resilience handlers, Redis token rotation, and multi-container Docker Compose orchestration.
 
-These are real backend concerns rather than CRUD, and each one is the kind of thing that comes up in interviews for junior and internship .NET roles.
+These are real backend concerns rather than CRUD, and each one is the kind of thing that comes up in interviews for senior .NET roles.
 
 ---
 
