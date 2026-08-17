@@ -367,6 +367,7 @@ For anyone reviewing this as a portfolio piece or preparing to defend these arch
 5. **[Production Defense-in-Depth & System Resilience](docs/05-production-defense-in-depth-and-resilience.md)**: Featuring ASP.NET Core rate limiting policies with custom 429 JSON error envelopes, `Microsoft.Extensions.Http.Resilience` handlers, Redis sliding refresh-token rotation with reuse detection, and multi-container Docker Compose orchestration.
 6. **[Frontend Design System & UI Architecture](docs/06-frontend-design-system-and-ui-architecture.md)**: Featuring the "Enamel Departure Board at Night" domain design tokens, physical ticket perforation components, `AbortController` network cancellation, and WAI-ARIA tab accessibility.
 7. **[Backend Clean Architecture & System Design Patterns](docs/07-backend-architecture-and-clean-design-patterns.md)**: Featuring Clean Architecture layer isolation enforced by NetArchTest rules, DDD aggregate root invariants, MediatR CQRS event buses, and dependency injection lifecycle scoping.
+8. **[Production Operations, Monitoring & Troubleshooting Runbook](docs/08-production-operations-monitoring-and-troubleshooting.md)**: Featuring health probes (`/health`, `pg_isready`, `redis-cli ping`), database indexing strategies (`int4range`, partial outbox index), and incident runbooks for serialization retries, webhook troubleshooting, and WebSocket proxying.
 
 These represent production full-stack concerns beyond standard CRUD, designed to demonstrate enterprise architecture principles in senior .NET software engineering interviews.
 
