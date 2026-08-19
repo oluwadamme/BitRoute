@@ -9,6 +9,7 @@ using BitRoute.Infrastructure;
 using BitRoute.Infrastructure.Identity;
 using BitRoute.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.JsonWebTokens;
@@ -30,15 +31,35 @@ builder.Services.AddInfrastructure(builder.Configuration);
 // Application: auth service, validators, options.
 builder.Services.AddApplication(builder.Configuration);
 
+// Comma-separated so a single environment variable can carry the whole list
+// (Cors__AllowedOrigins), which is how this is configured on Fly and in Docker.
+// The defaults cover local development only; deployed environments must set it.
+var corsOrigins = (builder.Configuration["Cors:AllowedOrigins"])
+    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("FrontendCors", policy =>
     {
-        policy.WithOrigins("http://localhost:3001","http://localhost:3000", "http://localhost:80")
+        policy.WithOrigins(corsOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
     });
+});
+
+// Fly terminates TLS at its edge and forwards over plain HTTP, so without this
+// the app sees http:// and UseHttpsRedirection below bounces every request into
+// a redirect loop. Fly sets X-Forwarded-Proto on the forwarded request.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+
+    // The default allowlist only trusts loopback. Fly's proxy reaches the
+    // container over the private 6PN network, so its headers would be dropped.
+    // Safe here because the container is only reachable through that proxy.
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
 });
 
 builder.Services.AddControllers();
@@ -145,8 +166,10 @@ await app.Services.SeedAdminUserAsync(app.Configuration);
 await app.Services.SeedOperatorUserAsync(app.Configuration);
 await app.Services.SeedBookingDataAsync();
 
-// Configure the HTTP request pipeline. The exception middleware sits first so it
-// can translate anything thrown below it.
+// Configure the HTTP request pipeline. Forwarded headers are applied before
+// anything else so the exception middleware, rate limiter and redirect below all
+// observe the real client scheme and IP rather than the proxy's.
+app.UseForwardedHeaders();
 app.UseMiddleware<ExceptionMiddleware>();
 
 if (app.Environment.IsDevelopment())
