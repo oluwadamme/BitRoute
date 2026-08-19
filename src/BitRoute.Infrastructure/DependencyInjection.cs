@@ -11,6 +11,7 @@ using StackExchange.Redis;
 using BitRoute.Infrastructure.Caching;
 using BitRoute.Infrastructure.Persistence.Repositories;
 using BitRoute.Application.Booking;
+using BitRoute.Infrastructure.Payments;
 namespace BitRoute.Infrastructure;
 
 /// <summary>
@@ -61,6 +62,13 @@ public static class DependencyInjection
             .Validate(o => o.RefreshTokenDays > 0, "Jwt:RefreshTokenDays must be positive.")
             .ValidateOnStart();
 
+        services.AddOptions<Payments.PaystackOptions>()
+            .Bind(configuration.GetSection(Payments.PaystackOptions.SectionName))
+            .Validate(o => !string.IsNullOrWhiteSpace(o.SecretKey), "Paystack:SecretKey is required.")
+            .Validate(o => !string.IsNullOrWhiteSpace(o.PublicKey), "Paystack:PublicKey is required.")
+            .Validate(o => !string.IsNullOrWhiteSpace(o.CallbackUrl), "Paystack:CallbackUrl is required.")
+            .ValidateOnStart();
+
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<ITokenGenerator, JwtTokenGenerator>();
         services.AddScoped<IIdentityService, IdentityService>();
@@ -73,9 +81,6 @@ public static class DependencyInjection
         services.AddSingleton<Caching.ICacheService, Caching.RedisCacheService>();
         services.AddSingleton<IRefreshTokenCrypto, RefreshTokenCrypto>();
         services.AddSingleton<IRefreshTokenStore, RedisRefreshTokenStore>();
-
-        services.AddOptions<Payments.PaystackOptions>()
-            .Bind(configuration.GetSection(Payments.PaystackOptions.SectionName));
 
         services.AddHttpClient<IPaystackService, Payments.PaystackService>()
             .AddStandardResilienceHandler();

@@ -71,6 +71,9 @@ public class BitRouteTestFactory : WebApplicationFactory<Program>, IAsyncLifetim
         builder.UseSetting("Jwt:SigningKey", "SuperSecretIntegrationTestingKey32BytesLong!");
         builder.UseSetting("Jwt:AccessTokenMinutes", "15");
         builder.UseSetting("Jwt:RefreshTokenDays", "7");
+        builder.UseSetting("Paystack:SecretKey", "sk_test_dummy_for_options_validation");
+        builder.UseSetting("Paystack:PublicKey", "pk_test_dummy_for_options_validation");
+        builder.UseSetting("Paystack:CallbackUrl", "http://localhost:3001/payment/callback");
     }
 
     private (string Postgres, string Redis) ResolveConnectionStrings()
