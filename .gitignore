@@ -42,7 +42,6 @@ dist-ssr/
 *.local
 .vite/
 .npm/
-package-lock.json
 
 # IDE & Editors (Rider, VS Code, Visual Studio)
 .idea/
