@@ -2,8 +2,25 @@
 
 A backend for booking seats on fixed-route transport, built in C# / .NET. The defining feature is segment-based seat inventory: a single physical seat can be sold to several passengers as long as their journeys do not overlap. A passenger riding A to C and another riding C to E can share the same seat on the same departure.
 
+## Live demo
+
+| Surface | URL |
+| --- | --- |
+| Web app | <https://bit-route-two.vercel.app> |
+| API | <https://bitroute-hnzpeq.fly.dev> |
+| API health | <https://bitroute-hnzpeq.fly.dev/healthz> |
+
+The React/Vite frontend is deployed on Vercel from `frontend/`. The .NET API runs on
+Fly.io in `ams`, backed by Fly Postgres and Upstash Redis. `/healthz` reports the
+live status of both dependencies.
+
+Interactive API docs are not exposed on the deployed API: Swagger is mapped only when
+`ASPNETCORE_ENVIRONMENT=Development`, and the deployed container runs as `Production`.
+See [Getting started](#getting-started) to browse them locally.
+
 ## Table of contents
 
+- [Live demo](#live-demo)
 - [The problem](#the-problem)
 - [The core invariant](#the-core-invariant)
 - [System components](#system-components)
@@ -102,9 +119,9 @@ Stateless, cryptographically signed JWT access tokens secure the API. Access win
 
 PostgreSQL with EF Core, using rich domain entities that run the overlap evaluation inside their own object boundaries rather than in anemic services. Transactional protection (Serializable isolation plus the exclusion constraint) prevents multi-threaded race conditions.
 
-### 3. Asynchronous payment processing (Stripe)
+### 3. Asynchronous payment processing (Paystack)
 
-A decoupled, server-to-server webhook listener. No sensitive PCI data is stored. Webhook payloads are verified against Stripe's cryptographic signature before anything is trusted, then a MediatR notification is published so the checkout is decoupled from the core application pipeline.
+A decoupled, server-to-server webhook listener. No sensitive PCI data is stored. Webhook payloads are verified against Paystack's cryptographic signature before anything is trusted, then a MediatR notification is published so the checkout is decoupled from the core application pipeline.
 
 ### 4. Real-time telemetry tracking
 
@@ -255,7 +272,7 @@ There is one booking path, not two. The difference is timing: scheduled booking 
 
 - **Caching**: availability reads are cached in Redis, keyed by schedule, travel date, and leg range, and invalidated on every booking write.
 - **Rate limiting**: applied to the booking and payment endpoints.
-- **Idempotency keys**: accepted on booking creation and enforced on Stripe webhooks.
+- **Idempotency keys**: accepted on booking creation and enforced on Paystack webhooks.
 - **Outbox pattern**: domain events such as "booking confirmed" are written in the same transaction as the booking, then dispatched by a worker. This survives a crash between the database commit and the email or notification.
 - **Observability**: structured logging with Serilog, a correlation id per request, and optional OpenTelemetry traces and metrics.
 
@@ -278,8 +295,8 @@ A representative slice of the endpoints. Shapes are indicative.
 | POST | `/schedules` | Define a schedule, its legs, and vehicle (operator) |
 | GET | `/schedules/{id}/availability?date={d}&from={i}&to={j}` | Seats available for a journey |
 | POST | `/bookings` | Hold a seat for a journey (idempotent) |
-| POST | `/bookings/{id}/pay` | Create a Stripe PaymentIntent for a held booking |
-| POST | `/webhooks/stripe` | Confirm payment (Stripe callback) |
+| POST | `/bookings/{id}/pay` | Create a Paystack PaymentIntent for a held booking |
+| POST | `/webhooks/Paystack` | Confirm payment (Paystack callback) |
 | GET | `/bookings/me` | List the caller's bookings |
 | DELETE | `/bookings/{id}` | Cancel a booking and release the seat |
 | WS | `/hubs/telemetry` | SignalR channel for live vehicle tracking |
@@ -307,7 +324,7 @@ dotnet run --project src/BitRoute.Api
 # http://localhost:5000/swagger
 ```
 
-Configuration (connection strings, JWT signing key, Stripe keys, Redis) is read from `appsettings.json` and environment variables. Do not commit secrets. For local Stripe webhooks, use the Stripe CLI to forward events to `/webhooks/stripe`.
+Configuration (connection strings, JWT signing key, Paystack keys, Redis) is read from `appsettings.json` and environment variables. Do not commit secrets. For local Paystack webhooks, use the Paystack CLI to forward events to `/webhooks/Paystack`.
 
 ## Roadmap
 
