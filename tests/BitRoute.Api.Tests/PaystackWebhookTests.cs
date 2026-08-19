@@ -35,6 +35,8 @@ public class PaystackWebhookTests : IClassFixture<WebApplicationFactory<Program>
         Environment.SetEnvironmentVariable("Jwt__SigningKey", "test-signing-key-that-is-long-enough-123456");
         Environment.SetEnvironmentVariable("Jwt__AccessTokenMinutes", "60");
         Environment.SetEnvironmentVariable("Jwt__RefreshTokenDays", "30");
+        Environment.SetEnvironmentVariable("Paystack__PublicKey", "pk_test_dummy_for_options_validation");
+        Environment.SetEnvironmentVariable("Paystack__CallbackUrl", "http://localhost:3001/payment/callback");
         Environment.SetEnvironmentVariable("Paystack__SecretKey", TestSecretKey);
 
         _factory = factory.WithWebHostBuilder(builder =>
