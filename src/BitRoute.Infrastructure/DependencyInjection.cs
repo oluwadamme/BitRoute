@@ -61,6 +61,13 @@ public static class DependencyInjection
             .Validate(o => o.RefreshTokenDays > 0, "Jwt:RefreshTokenDays must be positive.")
             .ValidateOnStart();
 
+        services.AddOptions<PaystackOptions>()
+            .Bind(configuration.GetSection(PaystackOptions.SectionName))
+            .Validate(o => !string.IsNullOrWhiteSpace(o.SecretKey), "Paystack:SecretKey is required.")
+            .Validate(o => !string.IsNullOrWhiteSpace(o.PublicKey), "Paystack:PublicKey is required.")
+            .Validate(o => !string.IsNullOrWhiteSpace(o.CallbackUrl), "Paystack:CallbackUrl is required.")
+            .ValidateOnStart();
+
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<ITokenGenerator, JwtTokenGenerator>();
         services.AddScoped<IIdentityService, IdentityService>();
