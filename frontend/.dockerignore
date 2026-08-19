@@ -1,0 +1,35 @@
+# Without this file the `COPY . .` in the Dockerfile ships the host's
+# node_modules into the build context, overwriting the `npm ci` layer with
+# host-platform binaries. On an arm64 Mac building a linux/amd64 image that
+# produces a broken esbuild and a failed `npm run build`.
+node_modules
+dist
+dist-ssr
+
+# Build output and caches
+.vite
+*.local
+*.tsbuildinfo
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Secrets must never enter an image layer, even one that is later discarded.
+.env
+.env.*
+!.env.example
+
+# Version control and editor state
+.git
+.gitignore
+.vscode
+.idea
+.DS_Store
+
+# Documentation and prompts are not build inputs
+src/skills
+README.md

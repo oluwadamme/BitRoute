@@ -1,0 +1,81 @@
+# .NET Build Output
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+build/
+bld/
+[Oo]ut/
+artifacts/
+
+# .NET / Roslyn / MSBuild
+project.lock.json
+project.fragment.lock.json
+*.binlog
+*.nuget.props
+*.nuget.targets
+.packages/
+*.user
+*.suo
+*.userprefs
+
+# Test Results & Code Coverage
+[Tt]est[Rr]esult*/
+coverage*.json
+coverage*.xml
+coverage*.info
+*.coverage
+*.coveragexml
+TestResults/
+
+# Node.js & Vite Frontend
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+dist-ssr/
+*.local
+.vite/
+.npm/
+package-lock.json
+
+# IDE & Editors (Rider, VS Code, Visual Studio)
+.idea/
+.vs/
+*.sln.iml
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.vsidx
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Environment Variables & Secrets
+appsettings.*.local.json
+*.env
+.env
+.env.*
+secrets.json
+!.env.example
+
+# Logs & Temporary Files
+*.log
+logs/
+tmp/
+temp/
+
+# OS Specific
+.DS_Store
+.DS_Store?
+._*
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini

@@ -1,0 +1,190 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /*
+   * Only the values that CSS (rather than Tailwind) needs to reach: the
+   * perforation punch-outs paint the page ground, and the ruled/tear borders
+   * need the rule colour. Everything else comes from the Tailwind tokens.
+   */
+  :root {
+    color-scheme: dark;
+    --surface: #15120e;
+    --rule: #332d24;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-surface text-content font-sans antialiased min-h-screen;
+    @apply selection:bg-signal selection:text-surface;
+    /*
+     * Fine fibre texture so the ground reads as a physical enamel panel rather
+     * than a flat fill. On a dark ground the grain is lifted rather than
+     * printed, so the noise is drawn light at a low opacity.
+     */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23g)' opacity='0.035'/%3E%3C/svg%3E");
+  }
+
+  /*
+   * A single visible focus treatment for the whole app. Keyboard users get a
+   * hard signage outline; pointer users never see it.
+   */
+  :focus-visible {
+    @apply outline-none ring-2 ring-signal ring-offset-2 ring-offset-surface rounded-ticket;
+  }
+
+  input,
+  textarea,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+
+  /* Make select match input sizing and appearance */
+  select {
+    font: inherit;
+    color: inherit;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.5rem center;
+    background-repeat: no-repeat;
+    background-size: 1.5em 1.5em;
+    padding-right: 2.5rem;
+  }
+
+  /*
+   * The native date picker indicator is drawn dark by the browser and is close
+   * to invisible on this ground, so it is inverted back to a light glyph.
+   */
+  input[type='date']::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    filter: invert(1);
+    opacity: 0.6;
+  }
+
+  input[type='date']::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+  }
+}
+
+@layer components {
+  /*
+   * Panel stock. The defining surface of the app: a raised panel ruled on every
+   * edge, lit along its top edge rather than floating on a drop shadow.
+   */
+  .stock {
+    @apply bg-surface-raised border border-rule rounded-ticket shadow-stub;
+  }
+
+  /*
+   * A perforated tear line, where a panel genuinely separates into two parts —
+   * most importantly between a journey and its fare.
+   */
+  .perforation {
+    position: relative;
+    border: 0;
+    border-top: 1px dashed var(--rule);
+  }
+
+  .perforation::before,
+  .perforation::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 14px;
+    height: 14px;
+    border-radius: 9999px;
+    /* Matches the page ground, so the punch reads as a hole through the panel. */
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    transform: translateY(-50%);
+  }
+
+  .perforation::before {
+    left: -8px;
+    clip-path: inset(0 0 0 50%);
+  }
+
+  .perforation::after {
+    right: -8px;
+    clip-path: inset(0 50% 0 0);
+  }
+
+  /* Ruled timetable rows, as on a printed departure sheet. */
+  .ruled > * + * {
+    border-top: 1px solid var(--rule);
+  }
+
+  /*
+   * Departure-board readout. Condensed, tightly tracked, tabular figures so
+   * times and fares never shift width as they update.
+   */
+  .board {
+    @apply font-display uppercase tracking-signage leading-none;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .figures {
+    @apply font-mono;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+
+  /* Small stencilled caps for field labels and status strings. */
+  .stencil {
+    @apply font-mono uppercase tracking-stencil text-[11px] font-medium;
+  }
+
+  /*
+   * Diagonal hatching for seats already sold on the requested journey. Pattern
+   * plus a lock icon, so occupancy is never signalled by colour alone. Drawn in
+   * light on this ground rather than dark.
+   */
+  .hatched {
+    background-image: repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 4px,
+      rgba(244, 239, 228, 0.07) 4px,
+      rgba(244, 239, 228, 0.07) 5px
+    );
+  }
+}
+
+@layer utilities {
+  /*
+   * Page-load choreography. Children stagger in once, on arrival.
+   *
+   * Never place this on a container that unmounts and remounts when data
+   * changes, or the cascade replays on every fetch.
+   */
+  .stagger > * {
+    animation: stub-in 420ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  }
+
+  .stagger > *:nth-child(1) { animation-delay: 40ms; }
+  .stagger > *:nth-child(2) { animation-delay: 100ms; }
+  .stagger > *:nth-child(3) { animation-delay: 160ms; }
+  .stagger > *:nth-child(4) { animation-delay: 220ms; }
+  .stagger > *:nth-child(5) { animation-delay: 280ms; }
+  .stagger > *:nth-child(6) { animation-delay: 340ms; }
+  .stagger > *:nth-child(n + 7) { animation-delay: 400ms; }
+}
+
+/*
+ * Anyone who has asked their system to reduce motion gets none of it.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

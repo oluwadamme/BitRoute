@@ -1,2 +1,16 @@
 <Solution>
+  <Folder Name="/src/">
+    <Project Path="src/BitRoute.Api/BitRoute.Api.csproj" />
+    <Project Path="src/BitRoute.Application/BitRoute.Application.csproj" />
+    <Project Path="src/BitRoute.Domain/BitRoute.Domain.csproj" />
+    <Project Path="src/BitRoute.Infrastructure/BitRoute.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/BitRoute.Api.Tests/BitRoute.Api.Tests.csproj" />
+    <Project Path="tests/BitRoute.Application.Tests/BitRoute.Application.Tests.csproj" />
+    <Project Path="tests/BitRoute.ArchitectureTests/BitRoute.ArchitectureTests.csproj" />
+    <Project Path="tests/BitRoute.Domain.Tests/BitRoute.Domain.Tests.csproj" />
+    <Project Path="tests/BitRoute.Infrastructure.Tests/BitRoute.Infrastructure.Tests.csproj" />
+    <Project Path="tests/BitRoute.IntegrationTests/BitRoute.IntegrationTests.csproj" />
+  </Folder>
 </Solution>
