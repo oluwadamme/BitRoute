@@ -9,6 +9,7 @@ using BitRoute.Infrastructure;
 using BitRoute.Infrastructure.Identity;
 using BitRoute.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.JsonWebTokens;
@@ -30,15 +31,37 @@ builder.Services.AddInfrastructure(builder.Configuration);
 // Application: auth service, validators, options.
 builder.Services.AddApplication(builder.Configuration);
 
+// Comma-separated so a single environment variable can carry the whole list
+// (Cors__AllowedOrigins), which is how this is configured in .env and fly secrets.
+// There is deliberately no hardcoded fallback - origins are environment-specific.
+// Missing config yields an empty list rather than throwing: the API still serves
+// non-browser clients, and the omission is logged loudly once at startup.
+var corsOrigins = (builder.Configuration["Cors:AllowedOrigins"] ?? string.Empty)
+    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("FrontendCors", policy =>
     {
-        policy.WithOrigins("http://localhost:3001","http://localhost:3000", "http://localhost:80")
+        policy.WithOrigins(corsOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
     });
+});
+
+// Fly terminates TLS at its edge and forwards over plain HTTP, so without this
+// the app sees http:// and UseHttpsRedirection below bounces every request into
+// a redirect loop. Fly sets X-Forwarded-Proto on the forwarded request.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+
+    // The default allowlist only trusts loopback. Fly's proxy reaches the
+    // container over the private 6PN network, so its headers would be dropped.
+    // Safe here because the container is only reachable through that proxy.
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
 });
 
 builder.Services.AddControllers();
@@ -55,24 +78,20 @@ builder.Services.AddRateLimiter(options =>
             ApiResponse.Error("Rate limit exceeded. Please try again later."), cancellationToken);
     };
 
-    options.AddFixedWindowLimiter("HoldPolicy", opt =>
-    {
-        opt.Window = TimeSpan.FromMinutes(1);
-        opt.PermitLimit = 30;
-        opt.QueueLimit = 0;
-    });
-    options.AddFixedWindowLimiter("AuthPolicy", opt =>
-    {
-        opt.Window = TimeSpan.FromMinutes(1);
-        opt.PermitLimit = 10;
-        opt.QueueLimit = 0;
-    });
-    options.AddFixedWindowLimiter("PublicSearchPolicy", opt =>
-    {
-        opt.Window = TimeSpan.FromMinutes(1);
-        opt.PermitLimit = 60;
-        opt.QueueLimit = 0;
-    });
+
+    options.AddPolicy("HoldPolicy", ctx => PerClient(ctx, "HoldPolicy", permitLimit: 30));
+    options.AddPolicy("AuthPolicy", ctx => PerClient(ctx, "AuthPolicy", permitLimit: 10));
+    options.AddPolicy("PublicSearchPolicy", ctx => PerClient(ctx, "PublicSearchPolicy", permitLimit: 60));
+
+    static RateLimitPartition<string> PerClient(HttpContext httpContext, string policyName, int permitLimit) =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"{policyName}:{httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown"}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromMinutes(1),
+                PermitLimit = permitLimit,
+                QueueLimit = 0
+            });
 });
 
 // Bearer validation must mirror JwtTokenGenerator: same key, issuer, audience, and
@@ -125,6 +144,13 @@ builder.Services.AddAuthorizationBuilder()
 
 var app = builder.Build();
 
+if (corsOrigins.Length == 0)
+{
+    app.Logger.LogWarning(
+        "Cors:AllowedOrigins is not configured, so every cross-origin browser request "
+        + "will be rejected. Set Cors__AllowedOrigins to a comma-separated origin list.");
+}
+
 // Apply migrations on startup automatically.
 using (var scope = app.Services.CreateScope())
 {
@@ -145,8 +171,10 @@ await app.Services.SeedAdminUserAsync(app.Configuration);
 await app.Services.SeedOperatorUserAsync(app.Configuration);
 await app.Services.SeedBookingDataAsync();
 
-// Configure the HTTP request pipeline. The exception middleware sits first so it
-// can translate anything thrown below it.
+// Configure the HTTP request pipeline. Forwarded headers are applied before
+// anything else so the exception middleware, rate limiter and redirect below all
+// observe the real client scheme and IP rather than the proxy's.
+app.UseForwardedHeaders();
 app.UseMiddleware<ExceptionMiddleware>();
 
 if (app.Environment.IsDevelopment())
