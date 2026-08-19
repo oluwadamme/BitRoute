@@ -2,54 +2,116 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [main, develop]
   pull_request:
-    branches:
-      - main
+    branches: [main, develop]
+
+# Least privilege: neither job writes back to the repo.
+permissions:
+  contents: read
+
+# Supersede in-flight runs for a branch, but never cancel a main/develop build.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
 
 jobs:
   test-dotnet:
-    name: Run .NET Tests
+    name: Build and Test (.NET)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Version comes from global.json so CI and local machines cannot drift.
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x' # Assuming .NET 8 based on typical recent C# projects. Adjust if needed.
+          global-json-file: global.json
+
+      # No packages.lock.json in this repo, so setup-dotnet's built-in cache
+      # cannot be used; key off the project files instead.
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', 'BitRoute.slnx') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      - name: Verify Docker is available
+        run: docker info > /dev/null
 
       - name: Restore dependencies
-        run: dotnet restore
+        run: dotnet restore BitRoute.slnx
 
       - name: Build
-        run: dotnet build --no-restore
+        run: dotnet build BitRoute.slnx --configuration Release --no-restore
 
+      # Testcontainers pulls postgres:17-alpine and redis:7-alpine here.
       - name: Test
-        run: dotnet test --no-build --verbosity normal
+        run: >
+          dotnet test BitRoute.slnx
+          --configuration Release
+          --no-build
+          --verbosity normal
+          --logger "trx;LogFileName=test-results.trx"
+          --results-directory ${{ github.workspace }}/test-results
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet-test-results
+          path: test-results/
+          if-no-files-found: ignore
+
+      # Reports only. The repo currently has known advisories (SQLitePCLRaw,
+      # SSH.NET), so failing here would make every run red until they are fixed.
+      - name: Audit for vulnerable packages
+        continue-on-error: true
+        run: |
+          dotnet list package --vulnerable --include-transitive | tee audit.log
+          if grep -q "has the following vulnerable packages" audit.log; then
+            echo "::warning::Vulnerable NuGet packages detected - see step output."
+          fi
 
   test-frontend:
-    name: Lint and Typecheck Frontend
+    name: Lint, Typecheck and Build (Frontend)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
-        working-directory: ./frontend
+        working-directory: frontend
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # cache-dependency-path is an action input, so defaults.run.working-directory
+      # does not apply to it - it must be repo-relative.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
+      # Strictly `npm ci`: an out-of-sync lockfile must fail the build, not
+      # silently fall back to `npm install`.
       - name: Install dependencies
-        run: npm ci || npm install
+        run: npm ci
 
       - name: Typecheck
         run: npm run typecheck
 
       - name: Lint
         run: npm run lint
+
+      # Compiles the same artifact Vercel deploys from frontend/.
+      - name: Build
+        run: npm run build
