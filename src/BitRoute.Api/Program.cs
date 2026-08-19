@@ -32,9 +32,11 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddApplication(builder.Configuration);
 
 // Comma-separated so a single environment variable can carry the whole list
-// (Cors__AllowedOrigins), which is how this is configured on Fly and in Docker.
-// The defaults cover local development only; deployed environments must set it.
-var corsOrigins = (builder.Configuration["Cors:AllowedOrigins"])
+// (Cors__AllowedOrigins), which is how this is configured in .env and fly secrets.
+// There is deliberately no hardcoded fallback - origins are environment-specific.
+// Missing config yields an empty list rather than throwing: the API still serves
+// non-browser clients, and the omission is logged loudly once at startup.
+var corsOrigins = (builder.Configuration["Cors:AllowedOrigins"] ?? string.Empty)
     .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
 builder.Services.AddCors(options =>
@@ -76,24 +78,20 @@ builder.Services.AddRateLimiter(options =>
             ApiResponse.Error("Rate limit exceeded. Please try again later."), cancellationToken);
     };
 
-    options.AddFixedWindowLimiter("HoldPolicy", opt =>
-    {
-        opt.Window = TimeSpan.FromMinutes(1);
-        opt.PermitLimit = 30;
-        opt.QueueLimit = 0;
-    });
-    options.AddFixedWindowLimiter("AuthPolicy", opt =>
-    {
-        opt.Window = TimeSpan.FromMinutes(1);
-        opt.PermitLimit = 10;
-        opt.QueueLimit = 0;
-    });
-    options.AddFixedWindowLimiter("PublicSearchPolicy", opt =>
-    {
-        opt.Window = TimeSpan.FromMinutes(1);
-        opt.PermitLimit = 60;
-        opt.QueueLimit = 0;
-    });
+
+    options.AddPolicy("HoldPolicy", ctx => PerClient(ctx, "HoldPolicy", permitLimit: 30));
+    options.AddPolicy("AuthPolicy", ctx => PerClient(ctx, "AuthPolicy", permitLimit: 10));
+    options.AddPolicy("PublicSearchPolicy", ctx => PerClient(ctx, "PublicSearchPolicy", permitLimit: 60));
+
+    static RateLimitPartition<string> PerClient(HttpContext httpContext, string policyName, int permitLimit) =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"{policyName}:{httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown"}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                Window = TimeSpan.FromMinutes(1),
+                PermitLimit = permitLimit,
+                QueueLimit = 0
+            });
 });
 
 // Bearer validation must mirror JwtTokenGenerator: same key, issuer, audience, and
@@ -145,6 +143,13 @@ builder.Services.AddAuthorizationBuilder()
     .AddPolicy(AuthPolicies.OperatorOnly, p => p.RequireRole(nameof(UserRole.Operator)));
 
 var app = builder.Build();
+
+if (corsOrigins.Length == 0)
+{
+    app.Logger.LogWarning(
+        "Cors:AllowedOrigins is not configured, so every cross-origin browser request "
+        + "will be rejected. Set Cors__AllowedOrigins to a comma-separated origin list.");
+}
 
 // Apply migrations on startup automatically.
 using (var scope = app.Services.CreateScope())
