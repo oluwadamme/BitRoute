@@ -25,10 +25,10 @@ public sealed class CreateVehicleRequestValidator : AbstractValidator<CreateVehi
         // The aisle occupies column (AisleAfterColumn + 1), so it must leave at least one
         // column on either side of it.
         RuleFor(v => v.AisleAfterColumn)
-            .Must((request, aisle) => aisle is null || (aisle >= 1 && aisle < request.SeatsPerRow))
+            .Must(IsValidAisleColumn)
             .WithMessage(v => $"AisleAfterColumn must fall between 1 and {v.SeatsPerRow - 1}, or be null for a vehicle with no aisle.");
 
-        RuleFor(v => v.Seats).NotNull().Must(s => s != null && s.Count > 0)
+        RuleFor(v => v.Seats).NotNull().Must(HasAtLeastOneSeat)
             .WithMessage("A vehicle must have at least one seat.");
 
         RuleForEach(v => v.Seats).ChildRules(seat =>
@@ -44,21 +44,36 @@ public sealed class CreateVehicleRequestValidator : AbstractValidator<CreateVehi
             .WithMessage((request, seat) => $"Seat '{seat.Number}' sits on row {seat.Row}, past the declared {request.RowCount} rows.")
             .Must((request, seat) => seat.Column <= request.SeatsPerRow)
             .WithMessage((request, seat) => $"Seat '{seat.Number}' sits on column {seat.Column}, past the declared width of {request.SeatsPerRow}.")
-            .Must((request, seat) => request.AisleAfterColumn is null || seat.Column != request.AisleAfterColumn + 1)
+            .Must(IsOffAisle)
             .WithMessage((request, seat) => $"Seat '{seat.Number}' sits on column {seat.Column}, which is the aisle.");
 
         // No two seats may occupy the same square of the plan, and no label may repeat.
         RuleFor(v => v.Seats)
-            .Must(seats => seats is null || seats
-                .GroupBy(s => (s.Row, s.Column))
-                .All(g => g.Count() == 1))
+            .Must(HasNoDuplicatePositions)
             .WithMessage("Two or more seats occupy the same row and column.")
-            .Must(seats => seats is null || seats
-                .Where(s => !string.IsNullOrWhiteSpace(s.Number))
-                .GroupBy(s => s.Number.Trim(), StringComparer.OrdinalIgnoreCase)
-                .All(g => g.Count() == 1))
+            .Must(HasNoDuplicateNumbers)
             .WithMessage("Seat numbers must be unique within a vehicle.");
     }
+
+    private static bool IsValidAisleColumn(CreateVehicleRequest request, int? aisle)
+        => aisle is null || (aisle >= 1 && aisle < request.SeatsPerRow);
+
+    private static bool HasAtLeastOneSeat(List<CreateSeatDto>? seats)
+        => seats != null && seats.Count > 0;
+
+    private static bool IsOffAisle(CreateVehicleRequest request, CreateSeatDto seat)
+        => request.AisleAfterColumn is null || seat.Column != request.AisleAfterColumn + 1;
+
+    private static bool HasNoDuplicatePositions(List<CreateSeatDto>? seats)
+        => seats is null || seats
+            .GroupBy(s => (s.Row, s.Column))
+            .All(g => g.Count() == 1);
+
+    private static bool HasNoDuplicateNumbers(List<CreateSeatDto>? seats)
+        => seats is null || seats
+            .Where(s => !string.IsNullOrWhiteSpace(s.Number))
+            .GroupBy(s => s.Number.Trim(), StringComparer.OrdinalIgnoreCase)
+            .All(g => g.Count() == 1);
 }
 
 public sealed class CreateScheduleRequestValidator : AbstractValidator<CreateScheduleRequest>

@@ -50,31 +50,7 @@ public sealed class Vehicle
 
         foreach (var placement in placements)
         {
-            if (placement.Row > layout.RowCount)
-            {
-                throw new ArgumentOutOfRangeException(
-                    nameof(seats), placement.Row,
-                    $"Seat '{placement.Number}' sits on row {placement.Row}, past the declared {layout.RowCount} rows.");
-            }
-
-            if (placement.Column > layout.SeatsPerRow)
-            {
-                throw new ArgumentOutOfRangeException(
-                    nameof(seats), placement.Column,
-                    $"Seat '{placement.Number}' sits on column {placement.Column}, past the declared width of {layout.SeatsPerRow}.");
-            }
-
-            if (placement.Column == layout.AisleColumn)
-            {
-                throw new ArgumentException(
-                    $"Seat '{placement.Number}' sits on column {placement.Column}, which is the aisle.", nameof(seats));
-            }
-
-            if (!occupied.Add((placement.Row, placement.Column)))
-            {
-                throw new ArgumentException(
-                    $"Two seats occupy row {placement.Row}, column {placement.Column}.", nameof(seats));
-            }
+            EnsurePlacementIsValid(placement, layout, occupied);
         }
 
         var vehicle = new Vehicle
@@ -92,5 +68,35 @@ public sealed class Vehicle
         }
 
         return vehicle;
+    }
+
+    private static void EnsurePlacementIsValid(
+        SeatPlacement placement, VehicleLayout layout, HashSet<(int Row, int Column)> occupied)
+    {
+        if (placement.Row > layout.RowCount)
+        {
+            throw new ArgumentOutOfRangeException(
+                "seats", placement.Row,
+                $"Seat '{placement.Number}' sits on row {placement.Row}, past the declared {layout.RowCount} rows.");
+        }
+
+        if (placement.Column > layout.SeatsPerRow)
+        {
+            throw new ArgumentOutOfRangeException(
+                "seats", placement.Column,
+                $"Seat '{placement.Number}' sits on column {placement.Column}, past the declared width of {layout.SeatsPerRow}.");
+        }
+
+        if (placement.Column == layout.AisleColumn)
+        {
+            throw new ArgumentException(
+                $"Seat '{placement.Number}' sits on column {placement.Column}, which is the aisle.", "seats");
+        }
+
+        if (!occupied.Add((placement.Row, placement.Column)))
+        {
+            throw new ArgumentException(
+                $"Two seats occupy row {placement.Row}, column {placement.Column}.", "seats");
+        }
     }
 }
