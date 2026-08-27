@@ -59,18 +59,7 @@ public sealed class OutboxProcessor : BackgroundService
 
         var now = _clock.GetUtcNow();
 
-        // Query unhandled messages whose next attempt instant has arrived or was never set
-        var candidateMessages = await dbContext.OutboxMessages
-            .Where(m => m.ProcessedOnUtc == null)
-            .Take(50)
-            .ToListAsync(cancellationToken);
-
-        var messages = candidateMessages
-            .Where(m => m.NextAttemptUtc == null || m.NextAttemptUtc.Value <= now)
-            .OrderBy(m => m.OccurredOnUtc)
-            .Take(20)
-            .ToList();
-
+        var messages = await FetchDueMessagesAsync(dbContext, now, cancellationToken);
         if (messages.Count == 0) return;
 
         _logger.LogInformation("Processing batch of {Count} outbox message(s).", messages.Count);
@@ -79,55 +68,81 @@ public sealed class OutboxProcessor : BackgroundService
         {
             try
             {
-                var eventType = ResolveType(message.Type);
-                if (eventType is null)
-                {
-                    throw new InvalidOperationException($"Could not resolve type '{message.Type}' for OutboxMessage '{message.Id}'.");
-                }
-
-                var domainEvent = JsonSerializer.Deserialize(message.Content, eventType);
-                if (domainEvent is null)
-                {
-                    throw new InvalidOperationException($"Failed to deserialize content for OutboxMessage '{message.Id}' into type '{eventType.FullName}'.");
-                }
-
-                if (domainEvent is INotification notification)
-                {
-                    await publisher.Publish(notification, cancellationToken);
-                }
-                else
-                {
-                    _logger.LogWarning("OutboxMessage '{Id}' of type '{Type}' does not implement INotification.", message.Id, message.Type);
-                }
-
-                message.MarkProcessed(now);
-                _logger.LogInformation("Successfully dispatched Outbox Event [{Type}] ID: '{Id}'.", message.Type, message.Id);
+                await DispatchMessageAsync(message, publisher, now, cancellationToken);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error processing outbox message '{Id}' (Type: '{Type}', Attempt {Attempt}/{MaxRetries}).",
-                    message.Id, message.Type, message.RetryCount + 1, OutboxMessage.MaxRetries);
-
-                if (message.RetryCount + 1 >= OutboxMessage.MaxRetries)
-                {
-                    message.RecordDeadLetter(ex.Message);
-                    _logger.LogError("OutboxMessage '{Id}' reached maximum retry attempts ({MaxRetries}) and was marked as DEAD-LETTER.",
-                        message.Id, OutboxMessage.MaxRetries);
-                }
-                else
-                {
-                    // Exponential backoff: 5s, 10s, 20s, 40s...
-                    var backoffSeconds = Math.Pow(2, message.RetryCount) * 5;
-                    var nextAttempt = now.AddSeconds(backoffSeconds);
-                    message.RecordFailure(ex.Message, nextAttempt);
-
-                    _logger.LogWarning("Scheduled retry #{RetryCount} for OutboxMessage '{Id}' at {NextAttemptUtc}.",
-                        message.RetryCount, message.Id, nextAttempt);
-                }
+                RecordDispatchFailure(message, ex, now);
             }
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private static async Task<List<OutboxMessage>> FetchDueMessagesAsync(
+        BitRouteDbContext dbContext, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        // Query unhandled messages whose next attempt instant has arrived or was never set
+        var candidateMessages = await dbContext.OutboxMessages
+            .Where(m => m.ProcessedOnUtc == null)
+            .Take(50)
+            .ToListAsync(cancellationToken);
+
+        return candidateMessages
+            .Where(m => m.NextAttemptUtc == null || m.NextAttemptUtc.Value <= now)
+            .OrderBy(m => m.OccurredOnUtc)
+            .Take(20)
+            .ToList();
+    }
+
+    private async Task DispatchMessageAsync(
+        OutboxMessage message, IPublisher publisher, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var eventType = ResolveType(message.Type);
+        if (eventType is null)
+        {
+            throw new InvalidOperationException($"Could not resolve type '{message.Type}' for OutboxMessage '{message.Id}'.");
+        }
+
+        var domainEvent = JsonSerializer.Deserialize(message.Content, eventType);
+        if (domainEvent is null)
+        {
+            throw new InvalidOperationException($"Failed to deserialize content for OutboxMessage '{message.Id}' into type '{eventType.FullName}'.");
+        }
+
+        if (domainEvent is INotification notification)
+        {
+            await publisher.Publish(notification, cancellationToken);
+        }
+        else
+        {
+            _logger.LogWarning("OutboxMessage '{Id}' of type '{Type}' does not implement INotification.", message.Id, message.Type);
+        }
+
+        message.MarkProcessed(now);
+        _logger.LogInformation("Successfully dispatched Outbox Event [{Type}] ID: '{Id}'.", message.Type, message.Id);
+    }
+
+    private void RecordDispatchFailure(OutboxMessage message, Exception ex, DateTimeOffset now)
+    {
+        _logger.LogError(ex, "Error processing outbox message '{Id}' (Type: '{Type}', Attempt {Attempt}/{MaxRetries}).",
+            message.Id, message.Type, message.RetryCount + 1, OutboxMessage.MaxRetries);
+
+        if (message.RetryCount + 1 >= OutboxMessage.MaxRetries)
+        {
+            message.RecordDeadLetter(ex.Message);
+            _logger.LogError("OutboxMessage '{Id}' reached maximum retry attempts ({MaxRetries}) and was marked as DEAD-LETTER.",
+                message.Id, OutboxMessage.MaxRetries);
+            return;
+        }
+
+        // Exponential backoff: 5s, 10s, 20s, 40s...
+        var backoffSeconds = Math.Pow(2, message.RetryCount) * 5;
+        var nextAttempt = now.AddSeconds(backoffSeconds);
+        message.RecordFailure(ex.Message, nextAttempt);
+
+        _logger.LogWarning("Scheduled retry #{RetryCount} for OutboxMessage '{Id}' at {NextAttemptUtc}.",
+            message.RetryCount, message.Id, nextAttempt);
     }
 
     private static Type? ResolveType(string typeName)

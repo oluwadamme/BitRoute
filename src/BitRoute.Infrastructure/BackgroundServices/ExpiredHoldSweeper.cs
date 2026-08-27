@@ -56,15 +56,7 @@ public sealed class ExpiredHoldSweeper : BackgroundService
 
         var utcNow = _clock.GetUtcNow();
 
-        var activeHeldBookings = await db.SeatBookings
-            .Where(b => b.Status == SeatBookingStatus.Held)
-            .Take(100)
-            .ToListAsync(cancellationToken);
-
-        var expiredBookings = activeHeldBookings
-            .Where(b => b.HoldExpiry.HasValue && b.HoldExpiry.Value <= utcNow)
-            .ToList();
-
+        var expiredBookings = await FetchExpiredHoldsAsync(db, utcNow, cancellationToken);
         if (expiredBookings.Count == 0) return;
 
         _logger.LogInformation("Sweeper found {Count} expired held seat booking(s). Transitioning to EXPIRED.", expiredBookings.Count);
@@ -73,44 +65,73 @@ public sealed class ExpiredHoldSweeper : BackgroundService
 
         foreach (var booking in expiredBookings)
         {
-            try
+            if (TryExpireBooking(booking, db, utcNow))
             {
-                booking.Expire();
                 successfullyExpired.Add(booking);
-
-                // Stage outbox event for asynchronous notification / cache processing
-                var expiredEvent = new SeatHoldExpiredEvent(
-                    booking.Id,
-                    booking.ScheduleId,
-                    booking.PassengerId,
-                    booking.TravelDate,
-                    booking.SeatId,
-                    booking.BoardingIndex,
-                    booking.AlightingIndex,
-                    utcNow);
-
-                var outboxMessage = OutboxMessage.Create(
-                    typeof(SeatHoldExpiredEvent).AssemblyQualifiedName ?? typeof(SeatHoldExpiredEvent).FullName!,
-                    JsonSerializer.Serialize(expiredEvent),
-                    utcNow);
-
-                db.OutboxMessages.Add(outboxMessage);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to transition booking '{BookingId}' to EXPIRED.", booking.Id);
             }
         }
 
         await db.SaveChangesAsync(cancellationToken);
 
         var cache = scope.ServiceProvider.GetService<BitRoute.Application.Booking.IAvailabilityCache>();
-        if (cache is not null)
+        await InvalidateAvailabilityCacheAsync(cache, successfullyExpired, cancellationToken);
+    }
+
+    private static async Task<List<SeatBooking>> FetchExpiredHoldsAsync(
+        BitRouteDbContext db, DateTimeOffset utcNow, CancellationToken cancellationToken)
+    {
+        var activeHeldBookings = await db.SeatBookings
+            .Where(b => b.Status == SeatBookingStatus.Held)
+            .Take(100)
+            .ToListAsync(cancellationToken);
+
+        return activeHeldBookings
+            .Where(b => b.HoldExpiry.HasValue && b.HoldExpiry.Value <= utcNow)
+            .ToList();
+    }
+
+    private bool TryExpireBooking(SeatBooking booking, BitRouteDbContext db, DateTimeOffset utcNow)
+    {
+        try
         {
-            foreach (var group in successfullyExpired.GroupBy(b => (b.ScheduleId, b.TravelDate)))
-            {
-                await cache.InvalidateAsync(group.Key.ScheduleId, group.Key.TravelDate, cancellationToken);
-            }
+            booking.Expire();
+
+            // Stage outbox event for asynchronous notification / cache processing
+            var expiredEvent = new SeatHoldExpiredEvent(
+                booking.Id,
+                booking.ScheduleId,
+                booking.PassengerId,
+                booking.TravelDate,
+                booking.SeatId,
+                booking.BoardingIndex,
+                booking.AlightingIndex,
+                utcNow);
+
+            var outboxMessage = OutboxMessage.Create(
+                typeof(SeatHoldExpiredEvent).AssemblyQualifiedName ?? typeof(SeatHoldExpiredEvent).FullName!,
+                JsonSerializer.Serialize(expiredEvent),
+                utcNow);
+
+            db.OutboxMessages.Add(outboxMessage);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to transition booking '{BookingId}' to EXPIRED.", booking.Id);
+            return false;
+        }
+    }
+
+    private static async Task InvalidateAvailabilityCacheAsync(
+        BitRoute.Application.Booking.IAvailabilityCache? cache,
+        List<SeatBooking> expiredBookings,
+        CancellationToken cancellationToken)
+    {
+        if (cache is null) return;
+
+        foreach (var group in expiredBookings.GroupBy(b => (b.ScheduleId, b.TravelDate)))
+        {
+            await cache.InvalidateAsync(group.Key.ScheduleId, group.Key.TravelDate, cancellationToken);
         }
     }
 }
