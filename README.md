@@ -7,16 +7,17 @@ A backend for booking seats on fixed-route transport, built in C# / .NET. The de
 | Surface | URL |
 | --- | --- |
 | Web app | <https://bit-route-two.vercel.app> |
-| API | <https://bitroute-hnzpeq.fly.dev> |
-| API health | <https://bitroute-hnzpeq.fly.dev/healthz> |
+| API | <https://bitroute.onrender.com> |
+| API docs (Swagger) | <https://bitroute.onrender.com/swagger> |
+| API health | <https://bitroute.onrender.com/healthz> |
 
 The React/Vite frontend is deployed on Vercel from `frontend/`. The .NET API runs on
-Fly.io in `ams`, backed by Fly Postgres and Upstash Redis. `/healthz` reports the
+Render, backed by Render Postgres and Upstash Redis. `/healthz` reports the
 live status of both dependencies.
 
-Interactive API docs are not exposed on the deployed API: Swagger is mapped only when
-`ASPNETCORE_ENVIRONMENT=Development`, and the deployed container runs as `Production`.
-See [Getting started](#getting-started) to browse them locally.
+The API root redirects to Swagger UI, which is exposed in every environment. To call
+protected endpoints from it, get a token from `POST /auth/login` and paste it into
+the **Authorize** dialog.
 
 ## Table of contents
 

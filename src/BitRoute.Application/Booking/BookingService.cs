@@ -163,10 +163,7 @@ public sealed class BookingService : IBookingService
         int alightingIndex,
         CancellationToken cancellationToken = default)
     {
-        if (boardingIndex < 0)
-            throw new BookingDomainException("Boarding index cannot be negative.");
-        if (alightingIndex <= boardingIndex)
-            throw new BookingDomainException("Alighting index must be greater than boarding index.");
+        EnsureValidSegment(boardingIndex, alightingIndex);
 
         var cached = await _cache.GetAsync(scheduleId, travelDate, boardingIndex, alightingIndex, cancellationToken);
         if (cached is not null)
@@ -183,15 +180,7 @@ public sealed class BookingService : IBookingService
         var seats = await _vehicleRepository.GetSeatsByVehicleIdAsync(schedule.VehicleId, cancellationToken);
         var activeBookings = await _bookingRepository.GetActiveBookingsAsync(scheduleId, travelDate, cancellationToken);
 
-        var seatAvailabilities = seats.Select(seat =>
-        {
-            var isAvailable = !activeBookings.Any(b =>
-                b.SeatId == seat.Id &&
-                b.BoardingIndex < alightingIndex &&
-                b.AlightingIndex > boardingIndex);
-
-            return new SeatAvailabilityDto(seat.Id, seat.Number, isAvailable, seat.Row, seat.Column);
-        }).ToList();
+        var seatAvailabilities = BuildSeatAvailabilities(seats, activeBookings, boardingIndex, alightingIndex);
 
         var layoutDto = new VehicleLayoutDto(
             layout.Value.RowCount, layout.Value.SeatsPerRow, layout.Value.AisleAfterColumn);
@@ -204,6 +193,31 @@ public sealed class BookingService : IBookingService
         return ApiResponse.Success(response, "Availability retrieved successfully.");
     }
 
+    private static void EnsureValidSegment(int boardingIndex, int alightingIndex)
+    {
+        if (boardingIndex < 0)
+            throw new BookingDomainException("Boarding index cannot be negative.");
+        if (alightingIndex <= boardingIndex)
+            throw new BookingDomainException("Alighting index must be greater than boarding index.");
+    }
+
+    private static List<SeatAvailabilityDto> BuildSeatAvailabilities(
+        IReadOnlyCollection<Seat> seats,
+        IReadOnlyCollection<SeatBooking> activeBookings,
+        int boardingIndex,
+        int alightingIndex)
+    {
+        return seats.Select(seat =>
+        {
+            var isAvailable = !activeBookings.Any(b =>
+                b.SeatId == seat.Id &&
+                b.BoardingIndex < alightingIndex &&
+                b.AlightingIndex > boardingIndex);
+
+            return new SeatAvailabilityDto(seat.Id, seat.Number, isAvailable, seat.Row, seat.Column);
+        }).ToList();
+    }
+
     public async Task<ApiResponse<BookingDto>> HoldSeatAsync(
         Guid passengerId,
         HoldSeatRequest request,
@@ -213,33 +227,11 @@ public sealed class BookingService : IBookingService
 
         var bookingDto = await _unitOfWork.ExecuteSerializableAsync(async () =>
         {
-            // 1. Idempotency Check
-            var existingBooking = await _bookingRepository.GetByIdempotencyKeyAsync(request.IdempotencyKey, cancellationToken);
+            var idempotentBooking = await TryGetIdempotentBookingAsync(passengerId, request, cancellationToken);
+            if (idempotentBooking is not null) return idempotentBooking;
 
-            if (existingBooking is not null)
-            {
-                if (existingBooking.PassengerId != passengerId ||
-                    existingBooking.ScheduleId != request.ScheduleId ||
-                    existingBooking.SeatId != request.SeatId ||
-                    existingBooking.TravelDate != request.TravelDate ||
-                    existingBooking.BoardingIndex != request.BoardingIndex ||
-                    existingBooking.AlightingIndex != request.AlightingIndex)
-                {
-                    throw new BookingDomainException("Idempotency key conflict: identical key reused with different parameters.");
-                }
+            var schedule = await LoadScheduleForHoldAsync(request, cancellationToken);
 
-                _logger.LogInformation("Idempotent hold check passed for booking '{BookingId}'", existingBooking.Id);
-                return MapToDto(existingBooking);
-            }
-
-            // 2. Fetch Schedule and Seats
-            var schedule = await _scheduleRepository.GetByIdAsync(request.ScheduleId, cancellationToken);
-            if (schedule is null) throw new ScheduleNotFoundException($"Schedule '{request.ScheduleId}' not found.");
-
-            var seatExists = await _vehicleRepository.SeatExistsAsync(request.SeatId, schedule.VehicleId, cancellationToken);
-            if (!seatExists) throw new BookingDomainException($"Seat '{request.SeatId}' does not exist on this schedule's vehicle.");
-
-            // 3. Check Overlaps
             var hasOverlap = await _bookingRepository.HasOverlapAsync(
                 request.ScheduleId, request.TravelDate, request.SeatId, request.BoardingIndex, request.AlightingIndex, cancellationToken);
 
@@ -248,7 +240,6 @@ public sealed class BookingService : IBookingService
                 throw new SeatUnavailableException("The requested seat is already booked or held for this segment.");
             }
 
-            // 4. Calculate Price & Create Hold
             var price = schedule.GetPrice(request.BoardingIndex, request.AlightingIndex);
             var booking = SeatBooking.CreateHeld(
                 passengerId,
@@ -266,6 +257,40 @@ public sealed class BookingService : IBookingService
 
         await _cache.InvalidateAsync(request.ScheduleId, request.TravelDate, cancellationToken);
         return ApiResponse.Success(bookingDto, "Seat hold created for 10 minutes.");
+    }
+
+    private async Task<BookingDto?> TryGetIdempotentBookingAsync(
+        Guid passengerId, HoldSeatRequest request, CancellationToken cancellationToken)
+    {
+        var existingBooking = await _bookingRepository.GetByIdempotencyKeyAsync(request.IdempotencyKey, cancellationToken);
+        if (existingBooking is null) return null;
+
+        if (!MatchesHoldRequest(existingBooking, passengerId, request))
+        {
+            throw new BookingDomainException("Idempotency key conflict: identical key reused with different parameters.");
+        }
+
+        _logger.LogInformation("Idempotent hold check passed for booking '{BookingId}'", existingBooking.Id);
+        return MapToDto(existingBooking);
+    }
+
+    private static bool MatchesHoldRequest(SeatBooking booking, Guid passengerId, HoldSeatRequest request)
+        => booking.PassengerId == passengerId
+           && booking.ScheduleId == request.ScheduleId
+           && booking.SeatId == request.SeatId
+           && booking.TravelDate == request.TravelDate
+           && booking.BoardingIndex == request.BoardingIndex
+           && booking.AlightingIndex == request.AlightingIndex;
+
+    private async Task<Schedule> LoadScheduleForHoldAsync(HoldSeatRequest request, CancellationToken cancellationToken)
+    {
+        var schedule = await _scheduleRepository.GetByIdAsync(request.ScheduleId, cancellationToken);
+        if (schedule is null) throw new ScheduleNotFoundException($"Schedule '{request.ScheduleId}' not found.");
+
+        var seatExists = await _vehicleRepository.SeatExistsAsync(request.SeatId, schedule.VehicleId, cancellationToken);
+        if (!seatExists) throw new BookingDomainException($"Seat '{request.SeatId}' does not exist on this schedule's vehicle.");
+
+        return schedule;
     }
 
     public async Task<ApiResponse<object>> ConfirmBookingAsync(Guid bookingId, CancellationToken cancellationToken = default)
@@ -438,10 +463,29 @@ public sealed class BookingService : IBookingService
         var totalCapacity = seats.Count;
         var totalRevenueKobo = confirmedBookings.Sum(b => b.Price);
 
-        var legOccupancies = new List<LegOccupancyDto>();
         var stops = schedule.Route?.Stops.ToDictionary(s => s.Index, s => s.Name) ?? new();
+        var legOccupancies = BuildLegOccupancies(schedule.ScheduleLegs, activeBookings, stops, totalCapacity);
 
-        foreach (var leg in schedule.ScheduleLegs.OrderBy(l => l.StartStopIndex))
+        var dto = new ScheduleAnalyticsDto(
+            scheduleId,
+            travelDate,
+            totalCapacity,
+            confirmedBookings.Count,
+            totalRevenueKobo,
+            legOccupancies);
+
+        return ApiResponse.Success(dto, "Schedule analytics generated successfully.");
+    }
+
+    private static List<LegOccupancyDto> BuildLegOccupancies(
+        IEnumerable<ScheduleLeg> scheduleLegs,
+        IReadOnlyCollection<SeatBooking> activeBookings,
+        Dictionary<int, string> stops,
+        int totalCapacity)
+    {
+        var legOccupancies = new List<LegOccupancyDto>();
+
+        foreach (var leg in scheduleLegs.OrderBy(l => l.StartStopIndex))
         {
             var startName = stops.GetValueOrDefault(leg.StartStopIndex, $"Stop {leg.StartStopIndex}");
             var endName = stops.GetValueOrDefault(leg.EndStopIndex, $"Stop {leg.EndStopIndex}");
@@ -458,14 +502,6 @@ public sealed class BookingService : IBookingService
                 percentage));
         }
 
-        var dto = new ScheduleAnalyticsDto(
-            scheduleId,
-            travelDate,
-            totalCapacity,
-            confirmedBookings.Count,
-            totalRevenueKobo,
-            legOccupancies);
-
-        return ApiResponse.Success(dto, "Schedule analytics generated successfully.");
+        return legOccupancies;
     }
 }

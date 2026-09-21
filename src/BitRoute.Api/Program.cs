@@ -36,8 +36,12 @@ builder.Services.AddApplication(builder.Configuration);
 // There is deliberately no hardcoded fallback - origins are environment-specific.
 // Missing config yields an empty list rather than throwing: the API still serves
 // non-browser clients, and the omission is logged loudly once at startup.
+// Browsers send Origin without a trailing slash and CORS matches it exactly, so a
+// URL pasted as "https://example.com/" would otherwise silently never match.
 var corsOrigins = (builder.Configuration["Cors:AllowedOrigins"] ?? string.Empty)
-    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+    .Select(origin => origin.TrimEnd('/'))
+    .ToArray();
 
 builder.Services.AddCors(options =>
 {
@@ -177,16 +181,14 @@ await app.Services.SeedBookingDataAsync();
 app.UseForwardedHeaders();
 app.UseMiddleware<ExceptionMiddleware>();
 
-if (app.Environment.IsDevelopment())
+app.MapOpenApi();
+app.UseSwaggerUI(options =>
 {
-    app.MapOpenApi();
+    options.SwaggerEndpoint("/openapi/v1.json", "BitRoute API v1");
+});
 
-    // Swagger UI over the built-in OpenAPI document, at /swagger.
-    app.UseSwaggerUI(options =>
-    {
-        options.SwaggerEndpoint("/openapi/v1.json", "BitRoute API v1");
-    });
-}
+// The bare API URL has nothing of its own to serve; send visitors to the docs.
+app.MapGet("/", () => Results.Redirect("/swagger")).ExcludeFromDescription();
 
 app.UseHttpsRedirection();
 

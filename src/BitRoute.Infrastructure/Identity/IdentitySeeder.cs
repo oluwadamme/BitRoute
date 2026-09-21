@@ -40,36 +40,13 @@ public static class IdentitySeeder
         await using var scope = services.CreateAsyncScope();
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
 
-        var email = configuration["Admin:Email"] ?? "admin@bitroute.com";
-        var password = configuration["Admin:Password"] ?? "AdminPassword123!";
-        var fullName = configuration["Admin:FullName"] ?? "System Administrator";
-
-        var existingUser = await userManager.FindByEmailAsync(email);
-        if (existingUser is null)
-        {
-            var adminUser = new ApplicationUser
-            {
-                Id = Guid.NewGuid(),
-                UserName = email,
-                Email = email,
-                FullName = fullName.Trim(),
-                EmailConfirmed = true
-            };
-
-            var result = await userManager.CreateAsync(adminUser, password);
-            if (!result.Succeeded)
-            {
-                throw new InvalidOperationException(
-                    $"Seeding Admin user '{email}' failed: {string.Join(" ", result.Errors.Select(e => e.Description))}");
-            }
-
-            var roleResult = await userManager.AddToRoleAsync(adminUser, UserRole.Admin.ToString());
-            if (!roleResult.Succeeded)
-            {
-                throw new InvalidOperationException(
-                    $"Assigning Admin role for '{email}' failed: {string.Join(" ", roleResult.Errors.Select(e => e.Description))}");
-            }
-        }
+        await SeedUserWithRoleAsync(
+            userManager,
+            email: configuration["Admin:Email"] ?? "admin@bitroute.com",
+            password: configuration["Admin:Password"] ?? "AdminPassword123!",
+            fullName: configuration["Admin:FullName"] ?? "System Administrator",
+            role: UserRole.Admin,
+            seedLabel: "Admin");
     }
 
     /// <summary>
@@ -80,35 +57,47 @@ public static class IdentitySeeder
         await using var scope = services.CreateAsyncScope();
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
 
-        var email = configuration["Operator:Email"] ?? "operator@bitroute.com";
-        var password = configuration["Operator:Password"] ?? "OperatorPassword123!";
-        var fullName = configuration["Operator:FullName"] ?? "Station Operator";
+        await SeedUserWithRoleAsync(
+            userManager,
+            email: configuration["Operator:Email"] ?? "operator@bitroute.com",
+            password: configuration["Operator:Password"] ?? "OperatorPassword123!",
+            fullName: configuration["Operator:FullName"] ?? "Station Operator",
+            role: UserRole.Operator,
+            seedLabel: "Operator");
+    }
 
+    private static async Task SeedUserWithRoleAsync(
+        UserManager<ApplicationUser> userManager,
+        string email,
+        string password,
+        string fullName,
+        UserRole role,
+        string seedLabel)
+    {
         var existingUser = await userManager.FindByEmailAsync(email);
-        if (existingUser is null)
+        if (existingUser is not null) return;
+
+        var user = new ApplicationUser
         {
-            var operatorUser = new ApplicationUser
-            {
-                Id = Guid.NewGuid(),
-                UserName = email,
-                Email = email,
-                FullName = fullName.Trim(),
-                EmailConfirmed = true
-            };
+            Id = Guid.NewGuid(),
+            UserName = email,
+            Email = email,
+            FullName = fullName.Trim(),
+            EmailConfirmed = true
+        };
 
-            var result = await userManager.CreateAsync(operatorUser, password);
-            if (!result.Succeeded)
-            {
-                throw new InvalidOperationException(
-                    $"Seeding Operator user failed: {string.Join(" ", result.Errors.Select(e => e.Description))}");
-            }
+        var result = await userManager.CreateAsync(user, password);
+        if (!result.Succeeded)
+        {
+            throw new InvalidOperationException(
+                $"Seeding {seedLabel} user '{email}' failed: {string.Join(" ", result.Errors.Select(e => e.Description))}");
+        }
 
-            var roleResult = await userManager.AddToRoleAsync(operatorUser, UserRole.Operator.ToString());
-            if (!roleResult.Succeeded)
-            {
-                throw new InvalidOperationException(
-                    $"Assigning Operator role failed: {string.Join(" ", roleResult.Errors.Select(e => e.Description))}");
-            }
+        var roleResult = await userManager.AddToRoleAsync(user, role.ToString());
+        if (!roleResult.Succeeded)
+        {
+            throw new InvalidOperationException(
+                $"Assigning {seedLabel} role for '{email}' failed: {string.Join(" ", roleResult.Errors.Select(e => e.Description))}");
         }
     }
 }
