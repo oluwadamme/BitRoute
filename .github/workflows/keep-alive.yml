@@ -1,0 +1,30 @@
+name: Keep Render awake
+
+# Render's free tier spins the API down after 15 minutes without traffic, and the
+# next request then waits out a cold start. Pinging /healthz rather than / also
+# exercises Postgres and Redis, so a failed run doubles as a downtime alert.
+#
+# Scheduled workflows only run from the default branch, and GitHub can delay them
+# under load, so this runs at the 5-minute minimum to stay inside the 15-minute
+# window. Offset from :00 because the top of the hour is when delays are worst.
+on:
+  schedule:
+    - cron: '2-59/5 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    name: Ping API health
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # --max-time covers a cold start; --retry rides out the 502/503s Render
+      # returns while the instance boots. --fail turns an unhealthy 503 into a
+      # failed run, which GitHub emails about.
+      - name: GET /healthz
+        run: >
+          curl --fail --silent --show-error
+          --max-time 90 --retry 3 --retry-delay 15 --retry-all-errors
+          https://bitroute.onrender.com/healthz
